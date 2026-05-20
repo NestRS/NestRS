@@ -1,0 +1,13 @@
+[package]
+name = "nestrs-server-timing"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "W3C Server-Timing response header interceptor for nestrs apps (independent of OpenTelemetry)."
+
+[dependencies]
+nestrs-middleware.workspace = true
+poem.workspace = true
+async-trait.workspace = true
