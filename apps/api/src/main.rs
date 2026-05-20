@@ -2,13 +2,14 @@ mod app;
 mod graphql;
 mod users;
 
+use anyhow::Result;
 use async_graphql_poem::GraphQL;
 use nestrs_core::{Container, Module};
 use nestrs_health::HealthController;
 use poem::{listener::TcpListener, post, Route, Server};
 
 #[tokio::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> Result<()> {
     nestrs_core::logging::init();
 
     let container = app::AppModule::register(Container::builder()).build();
@@ -29,5 +30,6 @@ async fn main() -> std::io::Result<()> {
 
     Server::new(TcpListener::bind("0.0.0.0:3000"))
         .run(routes)
-        .await
+        .await?;
+    Ok(())
 }

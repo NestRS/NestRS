@@ -39,6 +39,12 @@ async-trait = "0.1"
 async-graphql = "7"
 async-graphql-poem = "7"
 
+# Input validation
+validator = { version = "0.20", features = ["derive"] }
+
+# UUIDs
+uuid = { version = "1", features = ["v7"] }
+
 # Proc-macro dependencies
 syn = { version = "2", features = ["full"] }
 quote = "1"

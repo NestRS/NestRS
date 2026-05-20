@@ -1,12 +1,12 @@
 use async_graphql::{InputObject, SimpleObject};
 use serde::Serialize;
+use validator::Validate;
 
 use crate::users::entity::User;
 
-/// GraphQL output type — what clients receive.
 #[derive(Debug, Clone, Serialize, SimpleObject)]
 pub struct UserDto {
-    pub id: u32,
+    pub id: String,
     pub name: String,
     pub email: String,
 }
@@ -14,16 +14,17 @@ pub struct UserDto {
 impl From<&User> for UserDto {
     fn from(u: &User) -> Self {
         Self {
-            id: u.id,
+            id: u.id.clone(),
             name: u.name.clone(),
             email: u.email.clone(),
         }
     }
 }
 
-/// GraphQL input type — argument of the `createUser` mutation.
-#[derive(Debug, Clone, InputObject)]
+#[derive(Debug, Clone, InputObject, Validate)]
 pub struct CreateUserInput {
+    #[validate(length(min = 1))]
     pub name: String,
+    #[validate(email)]
     pub email: String,
 }

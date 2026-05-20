@@ -13,3 +13,7 @@ tracing.workspace = true
 serde.workspace = true
 async-graphql.workspace = true
 async-graphql-poem.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+validator.workspace = true
+uuid.workspace = true

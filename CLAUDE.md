@@ -59,6 +59,12 @@ Routing and wiring bugs do not surface in unit tests.
 ## Engineering posture
 
 - No premature abstraction. Extract after a pattern appears twice, not before.
+- Strict typing. Enums over string-typed states. Parse at the edge using
+  established crates (`validator` for declarative input checks, `uuid` for
+  UUID v7 IDs) rather than hand-rolling newtypes for every format-validated
+  string. Reserve newtypes for values whose *meaning* — not just format —
+  needs the type system's help. Avoid `Box<dyn Any>` and `serde_json::Value`
+  passthrough unless the data is genuinely unstructured.
 - Errors at boundaries: `thiserror` in libraries, `anyhow::Result` at the
   application entry. No `unwrap()` on production paths.
 - Doc comments only where the *why* is non-obvious. Never paraphrase the
