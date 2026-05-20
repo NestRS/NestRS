@@ -1,6 +1,3 @@
-//! Procedural macros mirroring NestJS's `@Injectable`, `@Module`, `@Controller`
-//! and the per-method route decorators (`@Get`, `@Post`, ...).
-
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
@@ -118,9 +115,8 @@ fn build_injectable_body(item: &mut ItemStruct) -> syn::Result<TokenStream2> {
 // #[module]
 // -----------------------------------------------------------------------------
 
-/// Declare a feature module — equivalent of `@Module({ imports, providers })` in NestJS.
+/// `#[module(imports = [OtherModule], providers = [SomeService])]`.
 ///
-/// Syntax: `#[module(imports = [OtherModule], providers = [SomeService])]`.
 /// Both keys are optional. Providers are registered in order against a fresh
 /// snapshot of the container so a later provider can depend on an earlier one.
 #[proc_macro_attribute]
@@ -240,13 +236,10 @@ impl Parse for ModuleArgs {
 // #[controller(path = "...")]
 // -----------------------------------------------------------------------------
 
-/// Declare an HTTP controller — equivalent of `@Controller('/health')` in NestJS.
+/// `#[controller(path = "/health")]` — paired with `#[routes]` on the impl block.
 ///
-/// Generates:
-/// - A `from_container(&Container) -> Self` constructor (like `#[injectable]`).
-/// - A `pub const PATH: &'static str` used by `#[routes]` as the route prefix.
-///
-/// Use together with `#[routes]` on the corresponding `impl` block.
+/// Generates a `from_container(&Container) -> Self` constructor and a
+/// `pub const PATH: &'static str` used by `#[routes]` as the route prefix.
 #[proc_macro_attribute]
 pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as ControllerArgs);

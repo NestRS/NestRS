@@ -1,5 +1,3 @@
-//! Core building blocks of the nestrs framework.
-
 pub mod config;
 pub mod container;
 pub mod error;
