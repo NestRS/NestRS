@@ -6,15 +6,16 @@ use nestrs_core::Container;
 use crate::users::dto::{CreateUserInput, UserDto};
 use crate::users::service::UsersService;
 
-/// Resolve the `UsersService` from the per-request GraphQL context.
 fn users_service(ctx: &Context<'_>) -> Result<Arc<UsersService>> {
     ctx.data::<Container>()?
         .get()
         .ok_or_else(|| async_graphql::Error::new("UsersService is not registered"))
 }
 
-/// GraphQL queries exposed by the users feature.
-/// Equivalent of the `@Query()` methods in a NestJS resolver.
+fn to_gql_error(error: impl std::fmt::Display) -> async_graphql::Error {
+    async_graphql::Error::new(error.to_string())
+}
+
 #[derive(Default)]
 pub struct UsersQuery;
 
@@ -24,18 +25,20 @@ impl UsersQuery {
         Ok(users_service(ctx)?.list().await)
     }
 
-    async fn user(&self, ctx: &Context<'_>, id: u32) -> Result<Option<UserDto>> {
-        Ok(users_service(ctx)?.find(id).await)
+    async fn user(&self, ctx: &Context<'_>, id: String) -> Result<Option<UserDto>> {
+        users_service(ctx)?.find(&id).await.map_err(to_gql_error)
     }
 }
 
-/// GraphQL mutations exposed by the users feature.
 #[derive(Default)]
 pub struct UsersMutation;
 
 #[Object]
 impl UsersMutation {
     async fn create_user(&self, ctx: &Context<'_>, input: CreateUserInput) -> Result<UserDto> {
-        Ok(users_service(ctx)?.create(input).await)
+        users_service(ctx)?
+            .create(input)
+            .await
+            .map_err(to_gql_error)
     }
 }
