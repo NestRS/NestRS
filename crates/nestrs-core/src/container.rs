@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 type AnyArc = Arc<dyn Any + Send + Sync>;
 
-/// Type-keyed provider registry — the nestrs equivalent of Nest's IoC container.
 #[derive(Clone, Default)]
 pub struct Container {
     providers: Arc<HashMap<TypeId, AnyArc>>,
