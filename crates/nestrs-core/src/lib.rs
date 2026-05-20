@@ -1,7 +1,6 @@
 pub mod config;
 pub mod container;
 pub mod error;
-pub mod logging;
 pub mod module;
 
 pub use container::{Container, ContainerBuilder};

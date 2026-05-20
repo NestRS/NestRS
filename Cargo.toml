@@ -19,6 +19,21 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# OpenTelemetry stack. SDK pinned with rt-tokio so batch exporters run on our
+# async runtime; OTLP exporter uses HTTP/protobuf over reqwest so we reuse the
+# rustls toolchain already in the workspace (no tonic/openssl).
+opentelemetry = "0.32"
+opentelemetry_sdk = { version = "0.32", features = ["rt-tokio"] }
+# Defaults give us http-proto + reqwest-blocking-client + trace/metrics/logs.
+# The batch processors run their HTTP exports from a dedicated thread that is
+# *not* a Tokio reactor, so the blocking reqwest client is the right pick —
+# the upstream-recommended pairing for batch exporters.
+opentelemetry-otlp = "0.32"
+opentelemetry-http = "0.32"
+opentelemetry-semantic-conventions = { version = "0.32", features = ["semconv_experimental"] }
+opentelemetry-appender-tracing = "0.32"
+tracing-opentelemetry = "0.33"
+
 # Errors
 thiserror = "2"
 anyhow = "1"
@@ -65,6 +80,9 @@ nestrs-core = { path = "crates/nestrs-core" }
 nestrs-macros = { path = "crates/nestrs-macros" }
 nestrs-health = { path = "crates/nestrs-health" }
 nestrs-mcp = { path = "crates/nestrs-mcp" }
+nestrs-middleware = { path = "crates/nestrs-middleware" }
+nestrs-server-timing = { path = "crates/nestrs-server-timing" }
+nestrs-telemetry = { path = "crates/nestrs-telemetry" }
 
 [profile.release]
 lto = "thin"
