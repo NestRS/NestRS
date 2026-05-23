@@ -22,9 +22,20 @@ by what they do, not by reflex-pointing at a Nest equivalent.
 `#[routes]`, and the per-verb attributes are how application code stays
 declarative. When you wire a new service, a feature module, or an HTTP
 endpoint, use them. When a pattern recurs and no macro covers it, **write a
-new macro in `crates/nestrs-macros`** rather than duplicate the boilerplate by
-hand. The macros are the leverage the project pays to maintain; spending them
-aggressively is the point.
+new decorator macro** rather than duplicate the boilerplate by hand.
+
+Because a `proc-macro` crate can export only macros, each decorator lives in a
+companion `*-macros` crate re-exported by its home crate: the
+surface-agnostic `#[injectable]`/`#[module]` in `nestrs-macros` (re-exported
+by `nestrs-core`); a surface's decorator in that surface's `*-macros` crate
+(`#[controller]`/`#[routes]`/`#[interceptor]` in `nestrs-http-macros`,
+`#[graphql]`/`#[resolver]` in `nestrs-graphql-macros`, `#[mcp]` in
+`nestrs-mcp-macros`), re-exported by the surface so apps import it from there
+(`nestrs_http::controller`). Shared token-building helpers go in
+`nestrs-macro-support`; a `*-macros` crate must not depend on its surface
+crate (it emits absolute-path tokens resolved at the call site), so there is
+no cycle. The macros are the leverage the project pays to maintain; spending
+them aggressively is the point.
 
 ## Dependency injection is internal
 
