@@ -107,6 +107,12 @@ resolver in the binary (no central list) and is committed as SDL at
 diffs. Run `just graphql-schema` after touching a resolver; `just
 graphql-schema-check` guards against drift in CI.
 
+It also exercises the request pipeline: `POST /users` is protected by an
+`#[injectable]` `ApiKeyGuard` bound with `#[use_guards]` (send an `x-api-key`
+header), which attaches a `Caller` the handler reads back via `Ctx<Caller>`. And
+a `#[cron_job]` (`UserCountReport`), ticked by the `Scheduler` transport, logs
+the user count on an interval.
+
 ### `app` — Minimal HTTP endpoint (port 3001)
 
 Started with `just dev app`. Listens on `http://0.0.0.0:3001` with a single
@@ -124,6 +130,11 @@ The bundled `current_weather` tool takes GPS coordinates and queries the
 [Open-Meteo](https://open-meteo.com) public forecast API. Latitude/longitude
 bounds are declared with `validator` annotations on the params struct and
 checked at the start of the tool handler.
+
+The upstream HTTP client shows the async-provider pattern: a `WeatherConfig` is
+seeded on `App::builder()` and an async `provide_factory` builds a
+timeout-configured `reqwest::Client` from it once at boot, which the tool then
+injects (override with `NESTRS_WEATHER__BASE_URL` / `NESTRS_WEATHER__REQUEST_TIMEOUT_MS`).
 
 | Endpoint | Purpose |
 |----------|---------|
