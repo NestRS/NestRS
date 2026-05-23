@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use async_trait::async_trait;
-use nestrs_core::interceptor;
+use nestrs_http::interceptor;
 use nestrs_middleware::{Interceptor, Next};
 use poem::http::HeaderName;
 use poem::{Request, Response, Result};

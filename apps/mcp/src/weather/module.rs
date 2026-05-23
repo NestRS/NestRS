@@ -1,8 +1,9 @@
 use nestrs_core::module;
 
+use crate::weather::controller::WeatherController;
 use crate::weather::service::{OpenMeteoClient, WeatherProvider};
 
-#[module(providers = [OpenMeteoClient as dyn WeatherProvider])]
+#[module(providers = [OpenMeteoClient as dyn WeatherProvider, WeatherController])]
 pub struct WeatherModule;
 
 #[cfg(test)]

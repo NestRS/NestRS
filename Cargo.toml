@@ -78,11 +78,15 @@ proc-macro2 = "1"
 
 # Internal crates
 nestrs-core = { path = "crates/nestrs-core" }
+nestrs-macro-support = { path = "crates/nestrs-macro-support" }
 nestrs-macros = { path = "crates/nestrs-macros" }
 nestrs-graphql = { path = "crates/nestrs-graphql" }
+nestrs-graphql-macros = { path = "crates/nestrs-graphql-macros" }
 nestrs-health = { path = "crates/nestrs-health" }
 nestrs-http = { path = "crates/nestrs-http" }
+nestrs-http-macros = { path = "crates/nestrs-http-macros" }
 nestrs-mcp = { path = "crates/nestrs-mcp" }
+nestrs-mcp-macros = { path = "crates/nestrs-mcp-macros" }
 nestrs-middleware = { path = "crates/nestrs-middleware" }
 nestrs-server-timing = { path = "crates/nestrs-server-timing" }
 nestrs-telemetry = { path = "crates/nestrs-telemetry" }

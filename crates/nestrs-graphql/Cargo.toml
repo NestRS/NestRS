@@ -9,4 +9,8 @@ description = "GraphQL resolver discovery + schema composition for nestrs apps, 
 
 [dependencies]
 nestrs-core.workspace = true
+nestrs-graphql-macros.workspace = true
 async-graphql.workspace = true
+# Re-exported so the `#[graphql(path = ...)]` mount code can name the poem
+# integration through the framework, keeping it out of every app's manifest.
+async-graphql-poem.workspace = true

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use nestrs_core::injectable;
+use nestrs_mcp::mcp;
 use nestrs_mcp::{
     tool, tool_handler, tool_router, CallToolResult, Content, McpError, Parameters, ServerHandler,
 };
@@ -9,7 +9,7 @@ use validator::Validate;
 use crate::weather::dto::CoordsParams;
 use crate::weather::service::WeatherProvider;
 
-#[injectable]
+#[mcp(path = "/mcp")]
 #[derive(Clone)]
 pub struct WeatherController {
     #[inject]

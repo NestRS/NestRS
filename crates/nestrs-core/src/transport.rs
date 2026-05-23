@@ -15,8 +15,8 @@ use crate::container::Container;
 /// Boot sequence orchestrated by [`crate::App::run`]:
 ///
 /// 1. `configure(&container)` is awaited on each transport, in registration
-///    order. A transport reads from the container's
-///    [`registry`](Container::registry) here to discover its surfaces.
+///    order. A transport reads the container's metadata via
+///    [`DiscoveryService`](crate::DiscoveryService) here to discover its surfaces.
 /// 2. Each transport's `serve` future is spawned with a shared
 ///    [`CancellationToken`]. SIGTERM/SIGINT cancels the token; transports
 ///    must observe it and shut down gracefully.

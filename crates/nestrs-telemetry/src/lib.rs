@@ -11,7 +11,7 @@
 //! [`OtelHttp`] is the HTTP interceptor: it bridges incoming W3C
 //! `traceparent` headers into per-request `tracing` spans, records the
 //! response status, surfaces the trace id as `X-Trace-Id` on responses, and
-//! — when the [`TelemetryConfig::http_access_log`] toggle is on — emits one
+//! — when the `NESTRS_HTTP__ACCESS_LOG` toggle on [`OtelHttp`] is on — emits one
 //! `tracing::info!` event per request with the htaccess-style summary.
 //!
 //! Sibling HTTP middleware lives in its own crate when it does not drive

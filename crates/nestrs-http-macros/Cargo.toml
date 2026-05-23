@@ -1,11 +1,11 @@
 [package]
-name = "nestrs-macros"
+name = "nestrs-http-macros"
 version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "Surface-agnostic nestrs decorators (#[injectable], #[module]). Re-exported by nestrs-core."
+description = "HTTP decorator macros for nestrs (#[controller], #[routes], verb attributes, #[interceptor]). Re-exported by nestrs-http."
 
 [lib]
 proc-macro = true

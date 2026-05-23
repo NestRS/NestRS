@@ -38,7 +38,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-graphql",
- "async-graphql-poem",
  "nestrs-core",
  "nestrs-graphql",
  "nestrs-health",
@@ -1378,7 +1377,19 @@ name = "nestrs-graphql"
 version = "0.1.0"
 dependencies = [
  "async-graphql",
+ "async-graphql-poem",
  "nestrs-core",
+ "nestrs-graphql-macros",
+]
+
+[[package]]
+name = "nestrs-graphql-macros"
+version = "0.1.0"
+dependencies = [
+ "nestrs-macro-support",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1399,6 +1410,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "nestrs-core",
+ "nestrs-http-macros",
  "nestrs-middleware",
  "poem",
  "tokio",
@@ -1407,9 +1419,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "nestrs-http-macros"
+version = "0.1.0"
+dependencies = [
+ "nestrs-macro-support",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "nestrs-macro-support"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "nestrs-macros"
 version = "0.1.0"
 dependencies = [
+ "nestrs-macro-support",
  "proc-macro2",
  "quote",
  "syn",
@@ -1420,9 +1452,20 @@ name = "nestrs-mcp"
 version = "0.1.0"
 dependencies = [
  "nestrs-core",
+ "nestrs-mcp-macros",
  "poem",
  "rmcp",
  "schemars",
+]
+
+[[package]]
+name = "nestrs-mcp-macros"
+version = "0.1.0"
+dependencies = [
+ "nestrs-macro-support",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

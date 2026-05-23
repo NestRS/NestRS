@@ -3,10 +3,11 @@ use nestrs_health::HealthModule;
 use nestrs_server_timing::ServerTiming;
 use nestrs_telemetry::OtelHttp;
 
+use crate::graphql::AppSchema;
 use crate::users::UsersModule;
 
 #[module(
     imports = [UsersModule, HealthModule],
-    providers = [ServerTiming, OtelHttp],
+    providers = [ServerTiming, OtelHttp, AppSchema],
 )]
 pub struct AppModule;
