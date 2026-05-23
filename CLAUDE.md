@@ -45,10 +45,27 @@ maintenance bar. The container in `crates/nestrs-core` is ours and stays ours.
 **Do not propose adopting an external DI crate.** If ergonomics fall short,
 extend ours.
 
+## Runtime values and async providers go through `App::builder()`
+
+`Module::register` is synchronous, so a `#[module]` cannot `await` a provider
+into existence (a DB pool, a cache client) or carry a value computed in `main`
+(a loaded config, parsed CLI args). `App::builder()` is the composition root for
+both. `build().await` runs three phases regardless of call order: **seeds**
+(`provide`/`provide_arc`/`provide_dyn`), then **factories**
+(`provide_factory(|c| async move { … })` — each sees the container so far, so a
+factory may depend on a seed or an earlier factory, and a failing one aborts
+boot), then **modules**, which register last and therefore inject the seeds and
+factory outputs above. Factories are the root's job: a module *consumes* an
+async-built provider but never declares one. Apps needing none of this keep
+using `App::new`. Registering the same concrete type twice logs a
+`nestrs::container` warning (the flat container makes such collisions silent
+otherwise); a `provide_dyn` rebinding is exempt — last-binding-wins is its
+documented override path.
+
 ## Discovery is struct-level by default
 
-Anything a module wires up — providers, controllers, interceptors, future
-cron jobs, event handlers, MCP tools, … — implements `Discoverable` and is
+Anything a module wires up — providers, controllers, interceptors, scheduled
+jobs, MCP tools, future event handlers, … — implements `Discoverable` and is
 declared in a single flat `#[module(providers = [...])]` list. The container
 indexes attached metadata by type; transports and applicative scanners read
 it via `DiscoveryService::meta::<MetaT>()`. The `#[module]` macro itself is
@@ -128,6 +145,36 @@ run in `(provider, method)` name order within a phase — link order is unstable
 and cross-provider init ordering is not expressed (a hook needing another
 service injects it). Init phases run after `configure`, before serving, and a
 failure aborts boot; shutdown phases run after the transports stop, best-effort.
+
+## Guards bind per route and carry request context
+
+A `Guard` (`nestrs-middleware`) borrows the request **mutably** — it both gates
+access (return `Err(Response)` to short-circuit, typically 401/403) and may
+*attach* request-scoped context (the authenticated caller, a tenant), the
+equivalent of NestJS setting `request.user`. A handler reads it back with the
+`nestrs_http::Ctx<T>` extractor (a missing context is a 500 — the guard that
+should have set it never ran). Bind guards per route with
+`#[use_guards(GuardA, GuardB)]` beside the verb attribute: each is resolved from
+the container (so a guard is an `#[injectable]` provider that can inject its own
+deps) and the first listed runs outermost. `#[routes]` wraps the handler's
+endpoint with them; consumed like the verb attributes, needing no import. Global
+guards still attach imperatively via `HttpTransport::guard`. Declarative
+per-handler *metadata* a guard reads to vary behaviour (NestJS's
+`@Roles`/`Reflector`) is the natural next step on this and not yet built.
+
+## Scheduling is the first concern proved out as its own crate
+
+`nestrs-schedule` realizes the "new concern = new crate + decorator, no
+`nestrs-macros` change" claim above. A scheduled job is a struct:
+`#[cron_job(every = "30s")]` builds it from the container (its `#[inject]`
+fields), implements `Scheduled` for the logic, and emits the single
+`impl Discoverable` attaching a `CronJobMeta` — exactly like a controller, so a
+job is wired by listing it in `#[module(providers = [...])]`. The `Scheduler` is
+a `Transport`: it reads the discovered metas from the *fully assembled* container
+at `configure` (so a job injects any provider, import order irrelevant) and ticks
+each on its period, the first run one period in. Fixed intervals only for now
+(`ms`/`s`/`m`/`h` suffixes); cron expressions wait for a parser that clears the
+dependency-freshness bar.
 
 ## Pipes are a transport-agnostic crate, applied at the surface boundary
 
