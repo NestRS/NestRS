@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use nestrs_core::{controller, routes};
+use nestrs_http::{controller, routes};
 use poem::{http::StatusCode, Response};
 
 use crate::service::HealthCheck;

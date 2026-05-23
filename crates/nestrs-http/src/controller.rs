@@ -22,6 +22,19 @@ pub enum HttpVerb {
     Patch,
 }
 
+impl HttpVerb {
+    /// Upper-case method name, e.g. for the boot route log.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Delete => "DELETE",
+            Self::Patch => "PATCH",
+        }
+    }
+}
+
 /// Declarative description of a single handler inside a controller.
 #[derive(Clone, Debug)]
 pub struct HttpRouteMeta {
@@ -44,11 +57,14 @@ pub struct HttpControllerMeta {
 }
 
 impl HttpControllerMeta {
-    pub fn new(path: &'static str, routes: Vec<HttpRouteMeta>, mount: Arc<MountFn>) -> Self {
+    pub fn new<F>(path: &'static str, routes: Vec<HttpRouteMeta>, mount: F) -> Self
+    where
+        F: Fn(&Container, Route) -> Route + Send + Sync + 'static,
+    {
         Self {
             path,
             routes,
-            mount,
+            mount: Arc::new(mount),
         }
     }
 

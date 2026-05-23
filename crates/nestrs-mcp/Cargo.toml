@@ -9,6 +9,7 @@ description = "Model Context Protocol server support for nestrs — wraps the rm
 
 [dependencies]
 nestrs-core.workspace = true
+nestrs-mcp-macros.workspace = true
 poem.workspace = true
 rmcp.workspace = true
 schemars.workspace = true

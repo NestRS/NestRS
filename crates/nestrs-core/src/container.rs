@@ -101,6 +101,14 @@ impl ContainerBuilder {
         self
     }
 
+    /// Whether a provider for `id` has already been registered. The `#[module]`
+    /// macro checks a provider's declared
+    /// [`Discoverable::dependencies`](crate::Discoverable::dependencies) against
+    /// this before building it, so providers can be listed in any order.
+    pub fn contains(&self, id: TypeId) -> bool {
+        self.providers.contains_key(&id)
+    }
+
     pub fn build(self) -> Container {
         Container {
             providers: Arc::new(self.providers),

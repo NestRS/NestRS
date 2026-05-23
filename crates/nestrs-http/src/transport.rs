@@ -10,19 +10,35 @@ use poem::{EndpointExt, IntoEndpoint, Response, Route, Server};
 use tokio_util::sync::CancellationToken;
 
 use crate::controller::HttpControllerMeta;
+use crate::endpoint::HttpEndpointMeta;
 use crate::interceptor::HttpInterceptorMeta;
 
 type MountFn = Box<dyn Fn(&Container, Route) -> Route + Send + Sync>;
+
+/// Join a controller prefix with a route path the way `poem`'s nesting does,
+/// for the boot route log: `("/health", "/live") -> "/health/live"`,
+/// `("/", "/") -> "/"`.
+fn join_path(prefix: &str, rest: &str) -> String {
+    let p = prefix.trim_end_matches('/');
+    let r = rest.trim_start_matches('/');
+    match (p.is_empty(), r.is_empty()) {
+        (true, true) => "/".to_string(),
+        (false, true) => p.to_string(),
+        (true, false) => format!("/{r}"),
+        (false, false) => format!("{p}/{r}"),
+    }
+}
 
 /// HTTP [`Transport`] backed by poem. Built up imperatively in the app's
 /// `main.rs`, attached to an [`nestrs_core::App`], and configured by it.
 ///
 /// At [`Transport::configure`] time, the transport queries the container's
-/// [`DiscoveryService`] for every [`HttpControllerMeta`] declared via
-/// `#[module(providers = [...])]`, mounts them, then mounts any extra
-/// endpoints registered via [`HttpTransport::mount`] (GraphQL playground,
-/// MCP streamable HTTP, etc.), then folds the interceptor / guard / filter
-/// chain around the assembled route.
+/// [`DiscoveryService`] for every [`HttpControllerMeta`] and every
+/// [`HttpEndpointMeta`] declared via `#[module(providers = [...])]` — the
+/// latter is how a GraphQL schema or MCP service mounts itself — then mounts
+/// any extra endpoints registered imperatively via [`HttpTransport::mount`],
+/// then folds the interceptor / guard / filter chain around the assembled
+/// route.
 pub struct HttpTransport {
     bind: String,
     interceptors: Vec<Arc<dyn Interceptor>>,
@@ -98,6 +114,25 @@ impl Transport for HttpTransport {
         let mut route = Route::new();
 
         for d in discovery.meta::<HttpControllerMeta>() {
+            for r in &d.meta.routes {
+                tracing::info!(
+                    target: "nestrs::routes",
+                    "{:<6} {}  ({})",
+                    r.verb.as_str(),
+                    join_path(d.meta.path, r.path),
+                    r.handler,
+                );
+            }
+            route = d.meta.mount(container, route);
+        }
+        for d in discovery.meta::<HttpEndpointMeta>() {
+            tracing::info!(
+                target: "nestrs::routes",
+                "{:<6} {}  ({})",
+                "*",
+                d.meta.path(),
+                d.meta.label(),
+            );
             route = d.meta.mount(container, route);
         }
         for mount in self.mounts.drain(..) {

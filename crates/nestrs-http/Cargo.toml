@@ -9,6 +9,7 @@ description = "HTTP transport for nestrs: HttpTransport, Controller trait and Ht
 
 [dependencies]
 nestrs-core.workspace = true
+nestrs-http-macros.workspace = true
 nestrs-middleware.workspace = true
 poem.workspace = true
 tokio.workspace = true

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_graphql::{Object, Result};
-use nestrs_core::resolver;
+use nestrs_graphql::resolver;
 
 use crate::users::dto::{CreateUserInput, UserDto};
 use crate::users::service::UsersService;
@@ -10,7 +10,7 @@ fn to_gql_error(error: impl std::fmt::Display) -> async_graphql::Error {
     async_graphql::Error::new(error.to_string())
 }
 
-#[resolver(kind = Query)]
+#[resolver]
 pub struct UsersQuery {
     #[inject]
     users: Arc<UsersService>,
@@ -27,7 +27,7 @@ impl UsersQuery {
     }
 }
 
-#[resolver(kind = Mutation)]
+#[resolver]
 pub struct UsersMutation {
     #[inject]
     users: Arc<UsersService>,

@@ -1,3 +1,5 @@
+use std::any::TypeId;
+
 use crate::container::ContainerBuilder;
 
 /// Anything a `#[module]` can pull in via `providers = [...]`.
@@ -15,5 +17,20 @@ use crate::container::ContainerBuilder;
 /// `<T as Discoverable>::register(builder)` uniformly — it knows nothing
 /// about HTTP, MCP, GraphQL, or any future surface.
 pub trait Discoverable {
+    /// The provider types that must already be registered before
+    /// [`register`](Discoverable::register) can build this one. `#[module]`
+    /// reads this to register providers in dependency order, so the
+    /// `providers = [...]` list can be written in any order.
+    ///
+    /// The default — no dependencies — fits anything that resolves its
+    /// dependencies lazily rather than at registration time: a controller
+    /// builds at mount time, a resolver at schema-build time, so neither
+    /// needs its dependencies present when `register` runs. Providers built
+    /// eagerly (`#[injectable]`, `#[interceptor]`) override this to list the
+    /// `TypeId` of each `#[inject]` dependency.
+    fn dependencies() -> Vec<TypeId> {
+        Vec::new()
+    }
+
     fn register(builder: ContainerBuilder) -> ContainerBuilder;
 }

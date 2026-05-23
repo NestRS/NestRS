@@ -2,26 +2,36 @@
 //!
 //! [`HttpTransport`] is a [`nestrs_core::Transport`] backed by `poem` that
 //! mounts every controller declared in the module tree (each emits an
-//! [`HttpControllerMeta`] via the `#[routes]` macro), plus any extra
-//! endpoints attached via [`HttpTransport::mount`]. The framework owns the
-//! route assembly and the server lifecycle so apps don't have to.
+//! [`HttpControllerMeta`] via the `#[routes]` macro), plus every
+//! self-mounting endpoint declared by another surface (a GraphQL schema, an
+//! MCP service — each emits an [`HttpEndpointMeta`]), plus any extra
+//! endpoints attached imperatively via [`HttpTransport::mount`]. The
+//! framework owns the route assembly and the server lifecycle so apps don't
+//! have to.
 //!
 //! Apps interact with this crate through three entry points:
 //! - [`HttpTransport`] — the transport itself (`new`, `bind`, `interceptor`,
 //!   `mount`, …).
 //! - [`Controller`] — implemented automatically by the `#[routes]` macro;
 //!   you rarely impl it by hand.
-//! - [`HttpControllerMeta`] / [`HttpInterceptorMeta`] — the discovery
-//!   metadata that the `#[routes]` / `#[interceptor]` macros attach to a
-//!   type; the transport reads them at boot via
-//!   [`nestrs_core::DiscoveryService`].
+//! - [`HttpControllerMeta`] / [`HttpEndpointMeta`] / [`HttpInterceptorMeta`] —
+//!   the discovery metadata that the `#[routes]`, `#[graphql]` /
+//!   `#[mcp]`, and `#[interceptor]` macros attach to a type; the
+//!   transport reads them at boot via [`nestrs_core::DiscoveryService`].
 
 mod controller;
+mod endpoint;
 mod interceptor;
 mod transport;
 
 pub use controller::{Controller, HttpControllerMeta, HttpRouteMeta, HttpVerb};
+pub use endpoint::HttpEndpointMeta;
 pub use interceptor::HttpInterceptorMeta;
 pub use transport::HttpTransport;
 
 pub use poem;
+
+/// HTTP decorators (`#[controller]`, `#[routes]`, the verb attributes,
+/// `#[interceptor]`), defined in `nestrs-http-macros` and surfaced here so
+/// apps write `nestrs_http::controller` etc.
+pub use nestrs_http_macros::{controller, interceptor, routes};
