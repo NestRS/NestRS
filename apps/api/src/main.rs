@@ -7,7 +7,6 @@ use std::process::ExitCode;
 use anyhow::Result;
 use nestrs_core::App;
 use nestrs_http::HttpTransport;
-use nestrs_schedule::Scheduler;
 use nestrs_telemetry::Telemetry;
 
 use crate::app::AppModule;
@@ -37,7 +36,6 @@ async fn serve() -> Result<()> {
 
     App::new::<AppModule>()
         .transport(HttpTransport::new().bind("0.0.0.0:3002"))
-        .transport(Scheduler::new())
         .run()
         .await
 }

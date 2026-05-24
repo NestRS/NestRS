@@ -1,0 +1,17 @@
+[package]
+name = "nestrs-queue-macros"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "The #[processor] decorator macro for nestrs-queue. Re-exported by nestrs-queue."
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn.workspace = true
+quote.workspace = true
+proc-macro2.workspace = true
+nestrs-macro-support.workspace = true

@@ -75,6 +75,13 @@ reqwest = { version = "0.13", default-features = false, features = ["json", "rus
 rmcp = { version = "1.7", features = ["server", "macros", "transport-streamable-http-server"] }
 schemars = "1"
 
+# Redis-backed job queues (NestJS's `@nestjs/bullmq` analog). apalis is the
+# background-task framework; apalis-redis is its Redis storage backend. Pinned to
+# the 0.7 stable line — 1.0 is still churning through release candidates and does
+# not clear our "no pre-release in a foundation dep" bar.
+apalis = "0.7"
+apalis-redis = "0.7"
+
 # Proc-macro dependencies
 syn = { version = "2", features = ["full"] }
 quote = "1"
@@ -94,6 +101,8 @@ nestrs-mcp = { path = "crates/nestrs-mcp" }
 nestrs-mcp-macros = { path = "crates/nestrs-mcp-macros" }
 nestrs-middleware = { path = "crates/nestrs-middleware" }
 nestrs-pipes = { path = "crates/nestrs-pipes" }
+nestrs-queue = { path = "crates/nestrs-queue" }
+nestrs-queue-macros = { path = "crates/nestrs-queue-macros" }
 nestrs-schedule = { path = "crates/nestrs-schedule" }
 nestrs-schedule-macros = { path = "crates/nestrs-schedule-macros" }
 nestrs-server-timing = { path = "crates/nestrs-server-timing" }
