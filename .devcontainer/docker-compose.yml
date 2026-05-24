@@ -1,0 +1,56 @@
+name: nestrs
+
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ..:/workspaces/nestrs:cached
+    # Keep the dev container alive; the real work happens via an attached shell.
+    command: sleep infinity
+    environment:
+      DATABASE_URL: postgres://nestrs:nestrs@postgres:5432/nestrs
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:18.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nestrs
+      POSTGRES_PASSWORD: nestrs
+      POSTGRES_DB: nestrs
+    # Postgres 18 moved the image VOLUME to /var/lib/postgresql (PGDATA is now
+    # the version-specific /var/lib/postgresql/18/docker), so mount there.
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nestrs -d nestrs"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:8.6.3
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:
+  redis-data:

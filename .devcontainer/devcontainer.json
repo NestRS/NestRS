@@ -1,8 +1,8 @@
 {
 	"name": "nestrs",
-	"build": {
-		"dockerfile": "Dockerfile"
-	},
+	"dockerComposeFile": "docker-compose.yml",
+	"service": "dev",
+	"workspaceFolder": "/workspaces/nestrs",
 	"customizations": {
 		"vscode": {
 			"extensions": [
