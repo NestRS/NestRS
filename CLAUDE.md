@@ -176,6 +176,49 @@ each on its period, the first run one period in. Fixed intervals only for now
 (`ms`/`s`/`m`/`h` suffixes); cron expressions wait for a parser that clears the
 dependency-freshness bar.
 
+## Queues are Redis-backed via apalis
+
+`nestrs-queue` is the NestJS `@nestjs/bullmq` analog, built on `apalis` +
+`apalis-redis` (the 0.7 stable line — 1.0 is still in release-candidate churn,
+below our pre-release bar for a foundation dep). A queue is **durable and
+distributed** because it lives in Redis: jobs survive a restart and any number
+of worker processes share one queue. It is deliberately *not* the `Scheduler` —
+that is in-process periodic work; this is persisted job processing with retries.
+
+A consumer is a struct, like a cron job: `#[processor(queue = "welcome-email",
+concurrency = 5, retries = 3)]` builds it from the container (`#[inject]`
+fields), implements `Processor` (`type Job` + `async fn process`), and emits the
+single `impl Discoverable` attaching a `ProcessorMeta` — so a processor is wired
+by listing it in `#[module(providers = [...])]`. The `QueueWorker` is a
+`Transport`: at `configure` it reads the discovered metas from the *fully
+assembled* container and resolves the shared connection; at `serve` it builds one
+apalis worker per processor on a single `Monitor` and runs it under
+`run_with_signal(cancel)`. `concurrency` maps to the Redis source's fetch buffer
+(the in-flight-job ceiling apalis runs as a `FuturesUnordered`), not a worker
+count — `register_with_count` is deprecated in 0.7. A processor's `process` error
+is boxed and retried up to `retries` by an apalis `RetryLayer` (which is why a
+`Job` payload must be `Clone`).
+
+Queues are **identified by name** (a string), matching `@Processor('name')` —
+the explicit, NestJS-familiar model chosen over keying by payload type. The
+producer injects the shared `QueueConnection` and enqueues by that name:
+`self.queue.of::<WelcomeEmail>("welcome-email").push(job).await?`. The name at
+the call site must match the consuming `#[processor(queue = "...")]`; this is the
+known cost of the stringly-typed model. Producer and consumer are decoupled — a
+process may enqueue to a queue whose processor lives elsewhere, so `Queue<T>`
+registration is **not** tied to `#[processor]`.
+
+The Redis connection is async, so it is **not** a module provider: seed it once
+at the composition root with an `App::builder()` factory
+(`provide_factory(|_| QueueConnection::connect(url))`), and the `QueueWorker`
+transport plus every producer resolve it from the container — import order
+irrelevant, the same final-container contract the `Scheduler` relies on. All
+apalis types stay inside `nestrs-queue` (it re-exports nothing apalis-shaped to
+apps, mirroring how `nestrs-graphql` wraps async-graphql), so `#[processor]`
+emits only `::nestrs_queue::*` paths and an app never takes a direct apalis
+dependency. `register_worker::<P>` is the monomorphic thunk the macro stores in
+the meta — the queue analog of `#[cron_job]`'s `RunFn`.
+
 ## Pipes are a transport-agnostic crate, applied at the surface boundary
 
 NestJS pipes (validation + transformation of a handler parameter) are **not** an
