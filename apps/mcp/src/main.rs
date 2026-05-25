@@ -14,9 +14,6 @@ use crate::weather::WeatherConfig;
 async fn main() -> Result<()> {
     let _telemetry = Telemetry::init("mcp")?;
 
-    // Seed the config, then build the upstream HTTP client from it once at boot
-    // (the timeout is configurable). `OpenMeteoClient` injects both. Modules
-    // register last, so they see these roots.
     App::builder()
         .provide(WeatherConfig::from_env())
         .provide_factory::<reqwest::Client, _, _>(|c| async move {

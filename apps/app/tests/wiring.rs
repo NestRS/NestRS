@@ -1,7 +1,3 @@
-//! `#[module(providers = [...])]` registers in dependency order, not list
-//! order. A provider may be listed before the dependency it injects, and a
-//! genuinely missing dependency fails fast at boot with a readable message.
-
 use std::sync::Arc;
 
 use nestrs_core::{injectable, module, Container, Module};
@@ -28,7 +24,6 @@ impl Consumer {
     }
 }
 
-// `Consumer` is listed *before* the `Dependency` it injects.
 #[module(providers = [Consumer, Dependency])]
 struct ReversedModule;
 
@@ -45,7 +40,6 @@ struct Orphan {
     _missing: Arc<Dependency>,
 }
 
-// `Dependency` is never provided, so `Orphan` can never be built.
 #[module(providers = [Orphan])]
 struct BrokenModule;
 

@@ -1,6 +1,3 @@
-//! The service the consumer delegates to. A banal stand-in for real audio work,
-//! it is an `#[injectable]` so `AudioConsumer` receives it from the container.
-
 use std::time::Duration;
 
 use anyhow::Result;

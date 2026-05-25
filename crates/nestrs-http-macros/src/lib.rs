@@ -26,10 +26,6 @@ type RouteHandler = (syn::Ident, syn::Ident, Vec<Path>, Option<Type>);
 /// (`GET` + `POST /users`), which `#[routes]` collapses into one `RouteMethod`.
 type RoutesByPath = Vec<(LitStr, Vec<RouteHandler>)>;
 
-// -----------------------------------------------------------------------------
-// #[controller(path = "...")]
-// -----------------------------------------------------------------------------
-
 /// `#[controller(path = "/health")]` — paired with `#[routes]` on the impl block.
 ///
 /// Generates a `from_container(&Container) -> Self` constructor and a
@@ -66,10 +62,6 @@ pub fn controller(args: TokenStream, input: TokenStream) -> TokenStream {
     }
     .into()
 }
-
-// -----------------------------------------------------------------------------
-// #[interceptor]
-// -----------------------------------------------------------------------------
 
 /// Mark a struct as an HTTP interceptor that the framework will discover
 /// and wrap around the route tree.
@@ -122,10 +114,6 @@ pub fn interceptor(_args: TokenStream, input: TokenStream) -> TokenStream {
     }
     .into()
 }
-
-// -----------------------------------------------------------------------------
-// #[routes]
-// -----------------------------------------------------------------------------
 
 /// Bind controller methods to HTTP routes.
 ///
@@ -437,9 +425,7 @@ fn guarded_handler(wrapper: &syn::Ident, guards: &[Path], shaper: &Option<Type>)
     expr
 }
 
-// -----------------------------------------------------------------------------
-// OpenAPI capture: `#[api(...)]` parsing and `Json<T>` payload-type extraction
-// -----------------------------------------------------------------------------
+// OpenAPI capture: `#[api(...)]` parsing and `Json<T>` payload-type extraction.
 
 /// Parsed `#[api(...)]` facets. Everything is optional; an empty attribute (or
 /// no attribute at all) leaves the route's OpenAPI defaults untouched.

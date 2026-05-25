@@ -186,11 +186,9 @@ fn dataloader_for_method(
 
         ::nestrs_graphql::inventory::submit! {
             ::nestrs_graphql::LoaderRegistration {
-                // Request-scoped: a fresh loader per request, built from the
-                // fully assembled container and seeded into the request context
-                // (see `nestrs_graphql::loader`). A `#[field]` reads it back via
-                // `&DataLoader<…>`. Building per request — not at module
-                // registration — is what makes import order irrelevant.
+                // Request-scoped: a fresh loader built per request from the fully
+                // assembled container (not at module registration — which is what
+                // makes import order irrelevant) and seeded into the request context.
                 seed: |__container, __request| {
                     let __loader = <#loader_name>::from_container(__container);
                     __request.data(
@@ -492,13 +490,10 @@ fn field_method(
 
     let method_name = &sig.ident;
 
-    // Split the post-parent arguments: an owned one is a GraphQL field argument
-    // (kept on the generated method, forwarded by name); a `&`-reference one is
-    // an injected dependency, never exposed in the schema — the two are
-    // unambiguous since a `&T` can never be a GraphQL `InputType`. An injected
-    // dep resolves from one of two scopes: a `&DataLoader<…>` is request-scoped,
-    // read from the request context where the loader extension seeded a fresh
-    // instance; any other service is a singleton, resolved from the container.
+    // Split the post-parent arguments: an owned one is a GraphQL field argument;
+    // a `&`-reference one is an injected dependency, unambiguous since a `&T` is
+    // never a GraphQL `InputType`. A `&DataLoader<…>` injects request-scoped from
+    // the context; any other `&service` is a singleton from the container.
     let mut gql_args: Vec<&FnArg> = Vec::new();
     let mut call_args: Vec<TokenStream2> = Vec::new();
     let mut dep_bindings: Vec<TokenStream2> = Vec::new();
