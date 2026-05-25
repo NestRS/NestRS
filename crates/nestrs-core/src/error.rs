@@ -2,10 +2,8 @@ use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-// `figment::Error` is ~208 bytes, so the `Err` variant of any `Result<_, Error>`
-// would inflate every fallible signature. Boxing keeps `Result` small enough
-// that `clippy::result_large_err` stays quiet without paying the cost on the
-// hot (Ok) path.
+// `figment::Error` is ~208 bytes; boxing it keeps every `Result<_, Error>` small,
+// satisfying `clippy::result_large_err` without bloating the hot (Ok) path.
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("configuration error: {0}")]

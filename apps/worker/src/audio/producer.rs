@@ -1,9 +1,3 @@
-//! `AudioProducer` — the producer, here a scheduled job rather than an HTTP
-//! handler. Every few seconds it makes up a file and enqueues a `TranscodeJob`,
-//! so this one app demonstrates the full produce → Redis → consume loop. It
-//! injects the shared `QueueConnection` exactly as a NestJS producer injects the
-//! `Queue`.
-
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 

@@ -1,7 +1,3 @@
-//! `AudioConsumer` — the queue consumer, mirroring NestJS's
-//! `@Processor('audio') class AudioConsumer`. It drains `TranscodeJob`s off the
-//! `audio` queue and delegates to the injected `Transcoder`.
-
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -41,8 +37,6 @@ mod tests {
             .iter()
             .find(|d| d.meta.name == "AudioConsumer")
             .expect("AudioConsumer is discovered via #[processor]");
-        // Pins the `#[processor(queue = "audio")]` literal to the const the
-        // producer uses, so the two queue names can't silently drift apart.
         assert_eq!(audio.meta.queue, AUDIO_QUEUE);
         assert_eq!(audio.meta.concurrency, 5);
         assert_eq!(audio.meta.retries, 3);

@@ -15,8 +15,6 @@ mod tests {
 
     #[test]
     fn registers_open_meteo_as_default_provider() {
-        // `OpenMeteoClient` injects the shared client and config that the app
-        // seeds before modules register, so the test seeds them too.
         let container = WeatherModule::register(
             Container::builder()
                 .provide(reqwest::Client::new())

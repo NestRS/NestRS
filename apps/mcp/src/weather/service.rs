@@ -22,10 +22,6 @@ pub trait WeatherProvider: Send + Sync + 'static {
     async fn current(&self, latitude: f64, longitude: f64) -> Result<WeatherReport, WeatherError>;
 }
 
-/// Open-Meteo client. The HTTP client is built once at boot by a
-/// `provide_factory` (timeout-configured from [`WeatherConfig`]) and injected,
-/// rather than constructed here — so the timeout is configurable and the client
-/// is shared. The base URL comes from the same injected config.
 #[injectable]
 pub struct OpenMeteoClient {
     #[inject]

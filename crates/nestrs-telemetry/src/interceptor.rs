@@ -167,13 +167,9 @@ fn client_ip(req: &Request) -> String {
 
 #[cfg(feature = "otlp")]
 fn response_bytes(res: &Response) -> u64 {
-    // Read the `Content-Length` header. Poem keeps the underlying http-body
-    // hidden (`BoxBody` is `pub(crate)`) so we can't probe a `SizeHint`
-    // without buffering. Handlers that return `Body::from_string`/`Bytes`
-    // get CL stamped by Poem at wire time — past this point in the chain
-    // — so the field reads `0`. Set CL explicitly in the handler when the
-    // byte count must show up in access logs. Streaming/chunked responses
-    // also log `0`, matching Apache's `%B` behaviour for unknown sizes.
+    // Poem hides the body (`BoxBody` is `pub(crate)`) and stamps Content-Length
+    // at wire time, past this point — so streamed/chunked responses, and any the
+    // handler didn't set CL on, log `0`, matching Apache's `%B` for unknown sizes.
     res.headers()
         .get(poem::http::header::CONTENT_LENGTH)
         .and_then(|v| v.to_str().ok())

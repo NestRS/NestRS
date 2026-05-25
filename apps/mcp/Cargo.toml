@@ -12,8 +12,6 @@ nestrs-http.workspace = true
 nestrs-middleware.workspace = true
 nestrs-server-timing.workspace = true
 nestrs-telemetry.workspace = true
-# rmcp must be a direct dep: its proc macros emit absolute `::rmcp::...` paths
-# that the compiler resolves in the crate they expand in, not at re-export.
 rmcp.workspace = true
 poem.workspace = true
 tokio.workspace = true

@@ -19,10 +19,6 @@ use nestrs_macro_support::{
     InjectableBody,
 };
 
-// -----------------------------------------------------------------------------
-// #[injectable]
-// -----------------------------------------------------------------------------
-
 /// Mark a struct as a provider that can be constructed from the IoC container.
 ///
 /// - Fields tagged `#[inject]` are resolved via `container.get()`.
@@ -68,10 +64,6 @@ pub fn injectable(_args: TokenStream, input: TokenStream) -> TokenStream {
     }
     .into()
 }
-
-// -----------------------------------------------------------------------------
-// #[hooks]
-// -----------------------------------------------------------------------------
 
 /// The phase attributes recognised inside a `#[hooks]` impl block, paired with
 /// the `LifecyclePhase` variant each maps to.
@@ -199,10 +191,6 @@ pub fn hooks(args: TokenStream, input: TokenStream) -> TokenStream {
     }
     .into()
 }
-
-// -----------------------------------------------------------------------------
-// #[module]
-// -----------------------------------------------------------------------------
 
 /// `#[module(imports = [...], providers = [...])]`.
 ///

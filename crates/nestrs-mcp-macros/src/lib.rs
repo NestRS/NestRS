@@ -11,10 +11,6 @@ use nestrs_macro_support::{
     build_injectable_body, from_container_method, parse_named_str_arg, InjectableBody,
 };
 
-// -----------------------------------------------------------------------------
-// #[mcp(path = "...")]
-// -----------------------------------------------------------------------------
-
 /// Mark a struct as an MCP server handler that mounts itself over HTTP.
 ///
 /// Behaves like `#[injectable]` for construction (fields with `#[inject]`
