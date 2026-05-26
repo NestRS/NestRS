@@ -1,7 +1,3 @@
-//! Authentication: the [`AuthGuard`] resolves the caller from request headers
-//! into an [`AuthUser`] and attaches it for downstream guards and handlers
-//! (header-based here; a JWT or session strategy would slot in the same way).
-
 use nestrs_core::injectable;
 use nestrs_http::{async_trait, Guard};
 use poem::http::StatusCode;

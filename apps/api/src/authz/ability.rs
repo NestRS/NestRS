@@ -9,8 +9,6 @@ use nestrs_core::injectable;
 use crate::authn::AuthUser;
 use crate::users::entity;
 
-/// Maps a principal to its [`Ability`](nestrs_authz::Ability) — the app's
-/// CASL-style rule set.
 #[injectable]
 #[derive(Default)]
 pub struct AppAbility;
