@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use nestrs_core::Container;
@@ -17,31 +18,38 @@ type MountFn = dyn Fn(&Container, Route) -> Route + Send + Sync;
 /// `poem` endpoint mounts itself simply by being listed in a `#[module]` —
 /// no hand-wiring in `main.rs`.
 pub struct HttpEndpointMeta {
-    path: &'static str,
-    label: &'static str,
+    path: Cow<'static, str>,
+    label: Cow<'static, str>,
     mount: Arc<MountFn>,
 }
 
 impl HttpEndpointMeta {
-    pub fn new<F>(path: &'static str, label: &'static str, mount: F) -> Self
+    /// `path` and `label` accept either a `&'static str` (the common case, a
+    /// const path) or an owned `String` — so a module configured via `for_root`
+    /// can nest at a runtime path.
+    pub fn new<F>(
+        path: impl Into<Cow<'static, str>>,
+        label: impl Into<Cow<'static, str>>,
+        mount: F,
+    ) -> Self
     where
         F: Fn(&Container, Route) -> Route + Send + Sync + 'static,
     {
         Self {
-            path,
-            label,
+            path: path.into(),
+            label: label.into(),
             mount: Arc::new(mount),
         }
     }
 
     /// The path this endpoint nests at — for the boot route log.
-    pub fn path(&self) -> &'static str {
-        self.path
+    pub fn path(&self) -> &str {
+        &self.path
     }
 
     /// A short surface tag (`graphql`, `mcp`) — for the boot route log.
-    pub fn label(&self) -> &'static str {
-        self.label
+    pub fn label(&self) -> &str {
+        &self.label
     }
 
     /// Nest this endpoint onto `route`, using `container` to build whatever

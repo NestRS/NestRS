@@ -46,7 +46,9 @@ pub type SchemaFn = fn(&mut schemars::SchemaGenerator) -> schemars::Schema;
 /// The [`SchemaFn`] the `#[routes]` macro instantiates for a payload type `T`.
 /// Kept here so the macro emits `::nestrs_http::schema_of::<T>` and never names
 /// `schemars`' generator API itself.
-pub fn schema_of<T: schemars::JsonSchema>(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+pub fn schema_of<T: schemars::JsonSchema>(
+    generator: &mut schemars::SchemaGenerator,
+) -> schemars::Schema {
     generator.subschema_for::<T>()
 }
 

@@ -21,4 +21,4 @@ mod document;
 mod module;
 mod ui;
 
-pub use module::OpenApiModule;
+pub use module::{OpenApiModule, OpenApiOptions, OpenApiSetup};

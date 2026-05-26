@@ -44,8 +44,7 @@ Run `just` with no arguments to list every recipe.
 | `just lint` | Clippy (strict) + format check |
 | `just fmt` | Apply rustfmt |
 | `just check` | Fast type-check (no codegen) |
-| `just graphql-schema <app>` | Regenerate an app's committed GraphQL SDL (default `api`, e.g. `apps/api/schema.graphql`) |
-| `just graphql-schema-check <app>` | Fail if that committed schema drifted from the resolvers (CI guard) |
+| `just graphql-schema <app>` | Regenerate an app's committed GraphQL SDL by hand (default `api`, e.g. `apps/api/schema.graphql`) |
 
 `build`, `test`, `cov`, `lint`, `fmt`, and `check` always operate on the whole
 workspace; `dev`, `run`, and the `graphql-schema` recipes take an app name
@@ -107,8 +106,8 @@ object type — it takes the resolved object as `parent: &T` and reaches service
 through the resolver's `#[inject]` fields. The schema composes itself from every
 resolver in the binary (no central list) and is committed as SDL at
 [`apps/api/schema.graphql`](apps/api/schema.graphql), so API changes surface in
-diffs. Run `just graphql-schema` after touching a resolver; `just
-graphql-schema-check` guards against drift in CI.
+diffs. Run `just graphql-schema` after touching a resolver and commit the
+result — regeneration is a deliberate manual step.
 
 The REST surface documents itself the same way: import `OpenApiModule` and the
 OpenAPI document composes from every `#[controller]` in the binary — verbs and

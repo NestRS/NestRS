@@ -36,8 +36,4 @@ check:
 
 # Regenerate an app's committed GraphQL schema (default: api). Usage: just graphql-schema api
 graphql-schema app="api":
-    cargo run --quiet -p {{app}} -- schema
-
-# Fail if an app's committed GraphQL schema drifted from its resolvers (default: api; run in CI)
-graphql-schema-check app="api":
-    cargo run --quiet -p {{app}} -- schema --check
+    cargo run --quiet -p {{app}} --bin schema

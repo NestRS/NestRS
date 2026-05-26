@@ -13,7 +13,12 @@ use serde_json::{json, Map, Value};
 /// [`HttpControllerMeta`]s the transport mounts and drives a single
 /// [`SchemaGenerator`] across all routes so every `Json<T>` payload contributes
 /// its definitions to a shared `components/schemas`.
-pub fn build_document(container: &Container, title: &str, version: &str) -> Value {
+pub fn build_document(
+    container: &Container,
+    title: &str,
+    version: &str,
+    description: Option<&str>,
+) -> Value {
     let discovery = DiscoveryService::new(container);
     // OpenAPI 3.1 schema objects *are* JSON Schema 2020-12, so we use schemars'
     // 2020-12 dialect (no `nullable`/single-type rewrites — those are the 3.0
@@ -43,9 +48,14 @@ pub fn build_document(container: &Container, title: &str, version: &str) -> Valu
     // 3.1.2 is the latest 3.1.x patch; its schema dialect is JSON Schema
     // 2020-12, matching the generator above. (`jsonSchemaDialect` is omitted —
     // 2020-12 is its default.)
+    let mut info = json!({ "title": title, "version": version });
+    if let (Some(description), Value::Object(info)) = (description, &mut info) {
+        info.insert("description".into(), json!(description));
+    }
+
     json!({
         "openapi": "3.1.2",
-        "info": { "title": title, "version": version },
+        "info": info,
         "paths": Value::Object(paths),
         "components": { "schemas": Value::Object(schemas) },
     })

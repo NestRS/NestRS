@@ -28,8 +28,7 @@ pub trait RouteResponseShaper {
 
     fn capture(req: &Request) -> Self::Captured;
 
-    fn shape(captured: Self::Captured, resp: Response)
-        -> impl Future<Output = Response> + Send;
+    fn shape(captured: Self::Captured, resp: Response) -> impl Future<Output = Response> + Send;
 }
 
 /// Wrap `inner` so the shaper `P` transforms its response. `P` is named via

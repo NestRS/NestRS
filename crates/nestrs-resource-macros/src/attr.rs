@@ -54,7 +54,8 @@ pub fn parse(args: TokenStream2, item: &mut ItemStruct) -> syn::Result<ResourceM
             complex = true;
             Ok(())
         } else {
-            Err(meta.error("unknown #[expose(...)] option (expected `name = \"...\"` or `complex`)"))
+            Err(meta
+                .error("unknown #[expose(...)] option (expected `name = \"...\"` or `complex`)"))
         }
     });
     syn::parse::Parser::parse2(parser, args)?;
