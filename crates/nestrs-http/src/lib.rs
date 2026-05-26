@@ -31,7 +31,9 @@ mod shaper;
 mod transport;
 
 pub use context::Ctx;
-pub use controller::{schema_of, Controller, HttpControllerMeta, HttpRouteMeta, HttpVerb, SchemaFn};
+pub use controller::{
+    schema_of, Controller, HttpControllerMeta, HttpRouteMeta, HttpVerb, SchemaFn,
+};
 pub use endpoint::HttpEndpointMeta;
 pub use interceptor::HttpInterceptorMeta;
 pub use pipe::{IntoInner, Piped, Valid};
