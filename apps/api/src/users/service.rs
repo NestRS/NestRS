@@ -13,9 +13,6 @@ use validator::Validate;
 
 use crate::users::entity::{self, ActiveModel, CreateUserInput, Entity as Users, User};
 
-/// Seed tenants, so the org-scoped filter is observable: org-scoped reads from
-/// one return only that org's rows. Also the org the GraphQL `createUser` writes
-/// into (it has no request principal).
 pub const ORG_ACME: Uuid = Uuid::from_u128(0x0000_0000_0000_0000_0000_0000_0000_ac3e);
 pub const ORG_GLOBEX: Uuid = Uuid::from_u128(0x0000_0000_0000_0000_0000_0000_0000_61b3);
 
