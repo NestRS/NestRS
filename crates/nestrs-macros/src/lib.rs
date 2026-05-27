@@ -317,59 +317,117 @@ pub fn module(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     } else {
         let count = proc_macro2::Literal::usize_unsuffixed(args.providers.len());
-        let steps = args.providers.iter().enumerate().map(|(i, binding)| {
-            let idx = proc_macro2::Literal::usize_unsuffixed(i);
-            let (provider, name_lit, register_action) = match binding {
-                ProviderBinding::Concrete(p) => (
-                    p,
-                    path_tail(p),
-                    quote! {
-                        builder = <#p as ::nestrs_core::Discoverable>::register(builder);
-                    },
-                ),
-                ProviderBinding::Dyn { provider, trait_ty } => (
-                    provider,
-                    path_tail(provider),
-                    quote! {
-                        let __snapshot = builder.snapshot();
-                        let __provider = #provider::from_container(&__snapshot);
-                        let __dyn: ::std::sync::Arc<#trait_ty> =
-                            ::std::sync::Arc::new(__provider);
-                        builder = builder.provide_dyn::<#trait_ty>(__dyn);
-                    },
-                ),
-            };
-            quote! {
-                if !__done[#idx] {
-                    if <#provider as ::nestrs_core::Discoverable>::dependencies()
-                        .iter()
-                        .all(|__id| builder.contains(*__id))
-                    {
-                        #register_action
-                        __done[#idx] = true;
-                        __progressed = true;
-                    } else {
-                        __pending.push(#name_lit);
+        // Per provider, three token streams: the register attempt (hot path), and
+        // two cold helpers used only when the fixpoint stalls — its provided key,
+        // and a classification of *why* it is still pending.
+        let parts: Vec<(
+            proc_macro2::TokenStream,
+            proc_macro2::TokenStream,
+            proc_macro2::TokenStream,
+        )> = args
+            .providers
+            .iter()
+            .enumerate()
+            .map(|(i, binding)| {
+                let idx = proc_macro2::Literal::usize_unsuffixed(i);
+                let (provider, name_lit, provided_key, register_action) = match binding {
+                    ProviderBinding::Concrete(p) => (
+                        p,
+                        path_tail(p),
+                        quote! { ::std::any::TypeId::of::<#p>() },
+                        quote! {
+                            builder = <#p as ::nestrs_core::Discoverable>::register(builder);
+                        },
+                    ),
+                    ProviderBinding::Dyn { provider, trait_ty } => (
+                        provider,
+                        path_tail(provider),
+                        quote! { ::std::any::TypeId::of::<::std::sync::Arc<#trait_ty>>() },
+                        quote! {
+                            let __snapshot = builder.snapshot();
+                            let __provider = #provider::from_container(&__snapshot);
+                            let __dyn: ::std::sync::Arc<#trait_ty> =
+                                ::std::sync::Arc::new(__provider);
+                            builder = builder.provide_dyn::<#trait_ty>(__dyn);
+                        },
+                    ),
+                };
+                let step = quote! {
+                    if !__done[#idx] {
+                        if <#provider as ::nestrs_core::Discoverable>::dependencies()
+                            .iter()
+                            .all(|__id| builder.contains(*__id))
+                        {
+                            #register_action
+                            __done[#idx] = true;
+                            __progressed = true;
+                        } else {
+                            __any_pending = true;
+                        }
                     }
-                }
-            }
-        });
+                };
+                let key_push = quote! {
+                    if !__done[#idx] {
+                        __pending_keys.push(#provided_key);
+                    }
+                };
+                let classify = quote! {
+                    if !__done[#idx] {
+                        let __missing_deps: ::std::vec::Vec<::std::any::TypeId> =
+                            <#provider as ::nestrs_core::Discoverable>::dependencies()
+                                .into_iter()
+                                .filter(|__id| !builder.contains(*__id))
+                                .collect();
+                        // A pure cycle: every dependency this provider still lacks
+                        // is one another *pending* provider would supply. Otherwise
+                        // a required provider is simply absent.
+                        if !__missing_deps.is_empty()
+                            && __missing_deps.iter().all(|__id| __pending_keys.contains(__id))
+                        {
+                            __cyclic.push(#name_lit);
+                        } else {
+                            __unprovided.push(#name_lit);
+                        }
+                    }
+                };
+                (step, key_push, classify)
+            })
+            .collect();
+
+        let steps = parts.iter().map(|p| &p.0);
+        let key_pushes = parts.iter().map(|p| &p.1);
+        let classifies = parts.iter().map(|p| &p.2);
 
         quote! {
             #(#import_calls)*
             let mut __done = [false; #count];
             loop {
-                let mut __pending: ::std::vec::Vec<&'static str> = ::std::vec::Vec::new();
+                let mut __any_pending = false;
                 let mut __progressed = false;
                 #(#steps)*
-                if __pending.is_empty() {
+                if !__any_pending {
                     break;
                 }
                 if !__progressed {
-                    ::std::panic!(
-                        "module `{}`: cannot resolve providers {:?} — a required provider is missing from this module or its imports, or there is a dependency cycle",
-                        #name_str, __pending
-                    );
+                    // Stalled: no provider built this round, yet some remain. Tell
+                    // the two failure modes apart so the message is actionable.
+                    let mut __pending_keys: ::std::vec::Vec<::std::any::TypeId> =
+                        ::std::vec::Vec::new();
+                    #(#key_pushes)*
+                    let mut __cyclic: ::std::vec::Vec<&'static str> = ::std::vec::Vec::new();
+                    let mut __unprovided: ::std::vec::Vec<&'static str> = ::std::vec::Vec::new();
+                    #(#classifies)*
+                    if !__unprovided.is_empty() {
+                        ::std::panic!(
+                            "module `{}`: cannot register provider(s) {:?} — each injects a dependency that neither this module's `providers` nor its `imports` registers; add the provider or import the module that exposes it",
+                            #name_str, __unprovided
+                        );
+                    } else {
+                        ::std::panic!(
+                            "module `{}`: dependency cycle among provider(s) {:?} — each waits on another provider in the same module; break it by injecting `Arc<dyn Trait>` instead of the concrete type",
+                            #name_str, __cyclic
+                        );
+                    }
                 }
             }
             builder

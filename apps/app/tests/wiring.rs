@@ -45,9 +45,35 @@ struct Orphan {
 struct BrokenModule;
 
 #[test]
-#[should_panic(expected = "cannot resolve providers")]
+#[should_panic(expected = "cannot register provider")]
 fn missing_dependency_panics_with_a_clear_message() {
+    // Orphan injects a Dependency no provider registers: the "missing provider"
+    // branch of the fixpoint, kept distinct from a cycle.
     let _ = BrokenModule::register(Container::builder()).build();
+}
+
+#[injectable]
+struct Yin {
+    #[inject]
+    _yang: Arc<Yang>,
+}
+
+#[injectable]
+struct Yang {
+    #[inject]
+    _yin: Arc<Yin>,
+}
+
+// Each injects the other (`Arc` breaks the recursion at the type level), so the
+// fixpoint can build neither — a genuine dependency cycle, reported as such
+// rather than as a missing provider.
+#[module(providers = [Yin, Yang])]
+struct CyclicModule;
+
+#[test]
+#[should_panic(expected = "dependency cycle")]
+fn mutual_dependency_is_reported_as_a_cycle() {
+    let _ = CyclicModule::register(Container::builder()).build();
 }
 
 // --- Module registration is idempotent (diamond imports) ---
