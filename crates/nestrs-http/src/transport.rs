@@ -6,6 +6,7 @@ use nestrs_core::{Container, DiscoveryService, Transport};
 use nestrs_middleware::{EndpointExt as NestrsEndpointExt, Filter, Guard, Interceptor};
 use poem::endpoint::BoxEndpoint;
 use poem::listener::TcpListener;
+use poem::middleware::Cors;
 use poem::{EndpointExt, IntoEndpoint, Response, Route, Server};
 use tokio_util::sync::CancellationToken;
 
@@ -46,6 +47,7 @@ pub struct HttpTransport {
     guards: Vec<Arc<dyn Guard>>,
     filters: Vec<Arc<dyn Filter>>,
     mounts: Vec<MountFn>,
+    cors: Option<Cors>,
     endpoint: Option<BoxEndpoint<'static, Response>>,
 }
 
@@ -63,6 +65,7 @@ impl HttpTransport {
             guards: Vec::new(),
             filters: Vec::new(),
             mounts: Vec::new(),
+            cors: None,
             endpoint: None,
         }
     }
@@ -84,6 +87,16 @@ impl HttpTransport {
 
     pub fn filter<F: Filter>(mut self, filter: F) -> Self {
         self.filters.push(Arc::new(filter));
+        self
+    }
+
+    /// Enable CORS with a configured `poem` [`Cors`] middleware — the analog of
+    /// NestJS's `app.enableCors(...)`. Build it from the re-exported poem
+    /// (`nestrs_http::poem::middleware::Cors::new().allow_origin("https://app.example")…`).
+    /// It wraps the whole route tree **outermost**, so a CORS preflight (`OPTIONS`)
+    /// is answered before any guard or interceptor runs.
+    pub fn cors(mut self, cors: Cors) -> Self {
+        self.cors = Some(cors);
         self
     }
 
@@ -171,6 +184,10 @@ impl Transport for HttpTransport {
             endpoint = NestrsEndpointExt::interceptor(endpoint, interceptor)
                 .map_to_response()
                 .boxed();
+        }
+        // CORS wraps outermost, so a preflight is handled before guards run.
+        if let Some(cors) = self.cors.take() {
+            endpoint = endpoint.with(cors).map_to_response().boxed();
         }
 
         self.endpoint = Some(endpoint);
