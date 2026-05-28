@@ -83,6 +83,39 @@ These are known, deliberate omissions called out in the code today:
   header- and media-type-based selection (NestJS's other `VersioningType`s, which
   need request-time dispatch) are not yet built.
 
+## Next — project & release infrastructure
+
+None of this exists yet; it is what turns the workspace into a project others can
+build on and contribute to. The repo stays a **single monorepo** (the model every
+multi-crate Rust framework uses — `tokio`, `bevy`, `axum`): one atomic commit can
+span a crate, its `*-macros` companion, and an example app, which a repo-per-crate
+split would make impossible.
+
+- **Continuous integration** — one workflow on every PR that gates merges:
+  `fmt --check`, `clippy -D warnings`, `build`, and `test --workspace`. The e2e
+  tests exercise live Postgres and Redis, so CI provisions both as service
+  containers. It publishes nothing — its only artifact is a green/red signal.
+- **Release automation** — versions move in **lockstep** (one number for the whole
+  workspace, centralised in `[workspace.package]` so a single line bumps every
+  crate) while the alpha API churns; independent per-crate versioning waits until
+  crates stabilise at different rates. Publishing to crates.io is automated — a
+  release PR bumps versions and changelogs, then publishes each crate in dependency
+  order; nothing is built or uploaded by hand. The `apps/` stay `publish = false`.
+- **A `nestrs` facade crate** — re-exports the building blocks behind one
+  dependency and one feature set, so an app adds `nestrs` rather than wiring the
+  internal crates by name (the way `tokio` and `bevy` front their workspaces). It
+  is also the single version an app pins.
+- **A scaffolding CLI** — `nestrs new <app>` generates a working starter, and
+  generators (`nestrs g controller`, `... entity`, `... resource`) emit the
+  declarative boilerplate from the same macros apps use (the `nest` / `nest g`
+  analog). It ships as another workspace crate; the starter is a template the CLI
+  instantiates, and a generated project is the user's own repo depending on the
+  published crates.
+- **A GitHub organisation** — one canonical home and repository URL (the
+  `Cargo.toml` `repository` and the docs currently disagree on the owner), with a
+  single primary repo — an org is for branding and collaborators, not a reason to
+  split the crates apart.
+
 ## Later — exploring
 
 - GraphQL **federation**, and the dedicated schema tooling it would reintroduce.
