@@ -35,8 +35,9 @@
 - 🛡️ **Verified before it serves.** The DI graph is wired by macros and checked at
   boot — no reflection, no runtime surprises.
 - 📦 **Batteries included.** HTTP, GraphQL, OpenAPI, MCP, Redis-backed queues,
-  scheduling, CASL-style authorization, health probes and OpenTelemetry — each an
-  opt-in crate, so you compile only what you import.
+  scheduling, an event bus, CASL-style authorization, health probes,
+  OpenTelemetry and an in-process test harness — each an opt-in crate, so you
+  compile only what you import.
 
 <sub>These describe native-Rust-vs-managed-runtime characteristics, not measured NestRS results — reproducible throughput, memory, and cold-start benchmarks are a tracked <a href="ROADMAP.md">roadmap</a> item.</sub>
 
@@ -226,22 +227,26 @@ surface is decorator macros — reach for them first (`#[injectable]`, `#[module
 | `nestrs-orm` | SeaORM database module — async pool via `DatabaseModule::for_root` |
 | `nestrs-queue` | Redis-backed durable job queues + workers (`#[processor]`); `apalis`-backed |
 | `nestrs-schedule` | In-process cron / interval jobs (`#[cron_job]`) |
-| `nestrs-authz` | CASL-style authorization: one ability → access gate + query pre-filter + response masking (HTTP binding in `nestrs-authz-http`) |
+| `nestrs-events` | Typed in-process event bus + `#[event_handler]` (the `@nestjs/event-emitter` analog) |
+| `nestrs-authz` | CASL-style authorization: one ability → access gate + query pre-filter + response masking (HTTP binding in `nestrs-authz-http`, GraphQL in `nestrs-authz-graphql`) |
 | `nestrs-pipes` | Transport-agnostic validation & transformation (`ValidationPipe`, `Parse*`, …) |
 | `nestrs-middleware` | Guards, interceptors, exception filters |
 | `nestrs-resource` | Expose a SeaORM entity to GraphQL **and** OpenAPI from one `#[expose]` |
 | `nestrs-health` | Kubernetes liveness / readiness / startup probes |
 | `nestrs-telemetry` | Structured logs, OpenTelemetry traces & metrics, per-request access log + `X-Trace-Id` |
 | `nestrs-server-timing` | `Server-Timing` response headers |
+| `nestrs-testing` | In-process test harness — boot the real DI graph and fire HTTP / GraphQL requests in `cargo test`, with provider overrides |
 
 Decorator macros live in companion `*-macros` crates (a Rust `proc-macro` crate
 can export only macros) with shared codegen in `nestrs-codegen`; these are
 internal plumbing, re-exported by the crates above and never depended on directly.
 
-Everything in the table runs in the example apps today. The rough edges and the
-deliberately-deferred gaps (cron expressions, OpenAPI security schemes, GraphQL
-federation) are tracked in the open [roadmap](ROADMAP.md) — nothing here is a
-hidden TODO.
+Most of the table runs in the example apps today; the newest crates
+(`nestrs-events`, `nestrs-authz-graphql`, `nestrs-testing`) ship with their own
+tests but are not yet wired into an example app — doing so is a good first
+contribution. The rough edges and deliberately-deferred gaps (cron expressions,
+OpenAPI security schemes, GraphQL federation) are tracked in the open
+[roadmap](ROADMAP.md) — nothing here is a hidden TODO.
 
 ## Getting started
 
@@ -448,11 +453,13 @@ project definition.
 | `#[injectable]` | `@Injectable()` |
 | `#[controller]` / `#[routes]` + `#[get]`/`#[post]`/… | `@Controller()` + `@Get()`/`@Post()`/… |
 | `#[use_guards(...)]` | `@UseGuards()` |
+| `#[meta(...)]` + `Reflector` | `@SetMetadata()` / `@Roles()` + `Reflector` |
 | `#[resolver]` + `#[query]`/`#[mutation]` | `@Resolver()` + `@Query()`/`@Mutation()` |
 | `#[field]` | `@ResolveField()` |
 | `#[dataloader]` | DataLoader |
 | `#[cron_job]` | `@Cron()` |
 | `#[processor]` | `@Processor()` |
+| `#[event_handler]` | `@OnEvent()` / event-emitter |
 | `#[hooks]` + `#[on_module_init]`/… | `onModuleInit()`/… lifecycle hooks |
 | `ValidationPipe` / `Parse*` | pipes |
 
@@ -468,6 +475,7 @@ project definition.
 | `nestrs-orm` | `@nestjs/typeorm` |
 | `nestrs-queue` | `@nestjs/bullmq` |
 | `nestrs-schedule` | `@nestjs/schedule` |
+| `nestrs-events` | `@nestjs/event-emitter` |
 | `nestrs-authz` | CASL / `@casl/ability` |
 | `nestrs-pipes` / `nestrs-middleware` | `@nestjs/common` |
 | `nestrs-health` | `@nestjs/terminus` |
