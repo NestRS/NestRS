@@ -45,10 +45,11 @@ struct Orphan {
 struct BrokenModule;
 
 #[test]
-#[should_panic(expected = "cannot register provider")]
+#[should_panic(expected = "Orphan (needs Dependency)")]
 fn missing_dependency_panics_with_a_clear_message() {
     // Orphan injects a Dependency no provider registers: the "missing provider"
-    // branch of the fixpoint, kept distinct from a cycle.
+    // branch of the fixpoint names the absent dependency type, kept distinct
+    // from a cycle.
     let _ = BrokenModule::register(Container::builder()).build();
 }
 

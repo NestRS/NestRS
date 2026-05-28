@@ -50,5 +50,14 @@ pub trait Discoverable {
         Vec::new()
     }
 
+    /// A human-readable label for each [`dependencies`](Discoverable::dependencies)
+    /// entry, in the same order, so the `#[module]` boot-time fixpoint can name a
+    /// missing dependency rather than only the provider that needs it. The default
+    /// — none — leaves the diagnostic to fall back to the provider name; the
+    /// eager-provider decorators (`#[injectable]`, `#[interceptor]`) override it.
+    fn dependency_names() -> Vec<&'static str> {
+        Vec::new()
+    }
+
     fn register(builder: ContainerBuilder) -> ContainerBuilder;
 }

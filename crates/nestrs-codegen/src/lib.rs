@@ -12,7 +12,7 @@ use quote::quote;
 use syn::parse::{ParseStream, Parser};
 use syn::{
     Fields, FnArg, GenericArgument, Ident, ItemStruct, LitStr, Pat, PathArguments, Signature,
-    Token, Type,
+    Token, Type, TypeParamBound,
 };
 
 /// Parse a decorator's sole `<key> = "..."` string argument from its attribute
@@ -71,12 +71,29 @@ fn arc_inner(ty: &Type) -> Option<&Type> {
     Some(inner)
 }
 
-/// If `ty` syntactically matches `Arc<dyn Trait + ...>`, return the inner
-/// trait-object type so the macro can emit a `get_dyn::<dyn Trait + ...>()`
-/// call.
-fn arc_dyn_inner(ty: &Type) -> Option<&Type> {
-    let inner = arc_inner(ty)?;
-    matches!(inner, Type::TraitObject(_)).then_some(inner)
+/// A short, human-readable label for a dependency type, used in boot
+/// diagnostics: the last path segment (`crate::a::Dep` → `Dep`), or `dyn Trait`
+/// for a trait object. Falls back to the token rendering for anything exotic.
+fn type_label(ty: &Type) -> String {
+    match ty {
+        Type::Path(tp) => tp
+            .path
+            .segments
+            .last()
+            .map(|seg| seg.ident.to_string())
+            .unwrap_or_else(|| quote!(#ty).to_string()),
+        Type::TraitObject(to) => {
+            let trait_name = to.bounds.iter().find_map(|b| match b {
+                TypeParamBound::Trait(t) => t.path.segments.last().map(|seg| seg.ident.to_string()),
+                _ => None,
+            });
+            match trait_name {
+                Some(name) => format!("dyn {name}"),
+                None => quote!(#ty).to_string(),
+            }
+        }
+        _ => quote!(#ty).to_string(),
+    }
 }
 
 /// The `idx`-th generic type argument of `ty` when its last path segment is
@@ -101,64 +118,77 @@ pub fn nth_generic_type<'a>(ty: &'a Type, name: &str, idx: usize) -> Option<&'a 
         .nth(idx)
 }
 
-/// The constructor expression for a struct's `from_container`, plus the
-/// `TypeId` expression of each `#[inject]` dependency. The dep keys feed the
-/// `Discoverable::dependencies` impl that lets `#[module]` order registration.
+/// The constructor expression for a struct's `from_container`, plus, per
+/// `#[inject]` dependency (in field order), its `TypeId` expression and a
+/// human-readable label. The keys feed `Discoverable::dependencies` (so
+/// `#[module]` can order registration); the labels feed
+/// `Discoverable::dependency_names` (so a boot-time error can name a missing one).
 pub struct InjectableBody {
     pub ctor: TokenStream2,
     pub dep_keys: Vec<TokenStream2>,
+    pub dep_names: Vec<TokenStream2>,
 }
 
 /// Strip `#[inject]` attributes from `item`'s fields and build its
 /// `from_container` constructor expression, collecting each injected
-/// dependency's `TypeId`. `#[inject] Arc<dyn Trait>` resolves via `get_dyn`;
-/// `#[inject] Arc<Concrete>` via `get`; everything else falls back to
-/// `Default::default()`.
+/// dependency's `TypeId` and label. `#[inject] Arc<dyn Trait>` resolves via
+/// `get_dyn`, `#[inject] Arc<Concrete>` via `get`; an `#[inject]` field that is
+/// not an `Arc<…>` is a hard error (a dependency is always a shared `Arc`). A
+/// field without `#[inject]` falls back to `Default::default()`.
 pub fn build_injectable_body(item: &mut ItemStruct) -> syn::Result<InjectableBody> {
     match &mut item.fields {
         Fields::Unit => Ok(InjectableBody {
             ctor: quote! { Self },
             dep_keys: Vec::new(),
+            dep_names: Vec::new(),
         }),
         Fields::Named(fields) => {
             let mut has_inject = false;
             let mut field_inits = Vec::new();
             let mut dep_keys = Vec::new();
+            let mut dep_names = Vec::new();
 
             for field in fields.named.iter_mut() {
                 let field_name = field.ident.clone().expect("named field has an ident");
                 let inject_idx = field.attrs.iter().position(|a| a.path().is_ident("inject"));
-                if let Some(idx) = inject_idx {
-                    field.attrs.remove(idx);
-                    has_inject = true;
-                    let msg = format!(
-                        "{}.{}: no provider registered for this dependency",
-                        item.ident, field_name
-                    );
-                    let field_ty = &field.ty;
-                    if let Some(trait_ty) = arc_dyn_inner(field_ty) {
-                        field_inits.push(quote! {
-                            #field_name: container.get_dyn::<#trait_ty>().expect(#msg)
-                        });
-                        // `provide_dyn` keys the binding by `TypeId::of::<Arc<dyn Trait>>()`,
-                        // which is exactly this field's type.
-                        dep_keys.push(quote! { ::core::any::TypeId::of::<#field_ty>() });
-                    } else {
-                        field_inits.push(quote! {
-                            #field_name: container.get().expect(#msg)
-                        });
-                        // `get()` resolves the type inside `Arc<Inner>`, so that
-                        // inner type is the dependency key.
-                        let key_ty = match arc_inner(field_ty) {
-                            Some(inner) => quote! { #inner },
-                            None => quote! { #field_ty },
-                        };
-                        dep_keys.push(quote! { ::core::any::TypeId::of::<#key_ty>() });
-                    }
-                } else {
+                let Some(idx) = inject_idx else {
                     field_inits.push(quote! {
                         #field_name: ::core::default::Default::default()
                     });
+                    continue;
+                };
+                field.attrs.remove(idx);
+                has_inject = true;
+
+                let field_ty = &field.ty;
+                let Some(inner_ty) = arc_inner(field_ty) else {
+                    return Err(syn::Error::new_spanned(
+                        field_ty,
+                        "#[inject] requires an `Arc<T>` or `Arc<dyn Trait>` field — a \
+                         dependency is resolved from the container as a shared `Arc`",
+                    ));
+                };
+                let msg = format!(
+                    "{}.{}: no provider registered for this dependency",
+                    item.ident, field_name
+                );
+                let label = type_label(inner_ty);
+                dep_names.push(quote! { #label });
+
+                if matches!(inner_ty, Type::TraitObject(_)) {
+                    field_inits.push(quote! {
+                        #field_name: container.get_dyn::<#inner_ty>().expect(#msg)
+                    });
+                    // `provide_dyn` keys the binding by `TypeId::of::<Arc<dyn Trait>>()`,
+                    // which is exactly this field's type.
+                    dep_keys.push(quote! { ::core::any::TypeId::of::<#field_ty>() });
+                } else {
+                    field_inits.push(quote! {
+                        #field_name: container.get().expect(#msg)
+                    });
+                    // `get()` resolves the type inside `Arc<Inner>`, so that
+                    // inner type is the dependency key.
+                    dep_keys.push(quote! { ::core::any::TypeId::of::<#inner_ty>() });
                 }
             }
 
@@ -167,7 +197,11 @@ pub fn build_injectable_body(item: &mut ItemStruct) -> syn::Result<InjectableBod
             } else {
                 quote! { <Self as ::core::default::Default>::default() }
             };
-            Ok(InjectableBody { ctor, dep_keys })
+            Ok(InjectableBody {
+                ctor,
+                dep_keys,
+                dep_names,
+            })
         }
         Fields::Unnamed(_) => Err(syn::Error::new_spanned(
             &item.fields,
@@ -240,6 +274,19 @@ pub fn dependencies_method(dep_keys: &[TokenStream2]) -> TokenStream2 {
     quote! {
         fn dependencies() -> ::std::vec::Vec<::core::any::TypeId> {
             #body
+        }
+    }
+}
+
+/// The `Discoverable::dependency_names` method — a human-readable label per
+/// `#[inject]` dependency, index-aligned with [`dependencies_method`], so the
+/// `#[module]` boot-time fixpoint can name a missing dependency in its error.
+/// Emitted only by eager providers (those that also emit `dependencies`), since
+/// only they can stall the fixpoint.
+pub fn dependency_names_method(dep_names: &[TokenStream2]) -> TokenStream2 {
+    quote! {
+        fn dependency_names() -> ::std::vec::Vec<&'static str> {
+            ::std::vec![ #(#dep_names),* ]
         }
     }
 }

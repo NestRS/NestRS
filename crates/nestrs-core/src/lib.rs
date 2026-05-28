@@ -20,4 +20,20 @@ pub use transport::Transport;
 // framework — apps never depend on `inventory` directly.
 pub use inventory;
 
-pub use nestrs_macros::{hooks, injectable, module};
+pub use nestrs_macros::{hooks, module};
+
+/// The provider decorator. Every `#[inject]` field must be an `Arc<T>` or
+/// `Arc<dyn Trait>` — a dependency is resolved from the container as a shared
+/// `Arc` — so a non-`Arc` injected field is rejected at compile time rather than
+/// failing with a cryptic type error in generated code:
+///
+/// ```compile_fail
+/// use nestrs_core::injectable;
+///
+/// #[injectable]
+/// struct Bad {
+///     #[inject]
+///     dep: u32, // not an `Arc` — compile error
+/// }
+/// ```
+pub use nestrs_macros::injectable;

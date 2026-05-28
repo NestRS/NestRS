@@ -15,8 +15,8 @@ use syn::{
 };
 
 use nestrs_codegen::{
-    build_injectable_body, dependencies_method, from_container_method, impl_self_ident,
-    injected_method, InjectableBody,
+    build_injectable_body, dependencies_method, dependency_names_method, from_container_method,
+    impl_self_ident, injected_method, InjectableBody,
 };
 
 /// Mark a struct as a provider that can be constructed from the IoC container.
@@ -33,7 +33,11 @@ use nestrs_codegen::{
 pub fn injectable(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut item = parse_macro_input!(input as ItemStruct);
 
-    let InjectableBody { ctor, dep_keys } = match build_injectable_body(&mut item) {
+    let InjectableBody {
+        ctor,
+        dep_keys,
+        dep_names,
+    } = match build_injectable_body(&mut item) {
         Ok(body) => body,
         Err(err) => return err.to_compile_error().into(),
     };
@@ -42,6 +46,7 @@ pub fn injectable(_args: TokenStream, input: TokenStream) -> TokenStream {
     let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
     let from_container = from_container_method(&ctor);
     let dependencies = dependencies_method(&dep_keys);
+    let dependency_names = dependency_names_method(&dep_names);
     let injected = injected_method(&dep_keys);
 
     quote! {
@@ -53,6 +58,7 @@ pub fn injectable(_args: TokenStream, input: TokenStream) -> TokenStream {
 
         impl #impl_generics ::nestrs_core::Discoverable for #name #ty_generics #where_clause {
             #dependencies
+            #dependency_names
             #injected
 
             fn register(
@@ -373,20 +379,32 @@ pub fn module(args: TokenStream, input: TokenStream) -> TokenStream {
                 };
                 let classify = quote! {
                     if !__done[#idx] {
-                        let __missing_deps: ::std::vec::Vec<::std::any::TypeId> =
-                            <#provider as ::nestrs_core::Discoverable>::dependencies()
-                                .into_iter()
-                                .filter(|__id| !builder.contains(*__id))
-                                .collect();
+                        let __deps = <#provider as ::nestrs_core::Discoverable>::dependencies();
+                        let __dep_names =
+                            <#provider as ::nestrs_core::Discoverable>::dependency_names();
+                        let mut __missing_ids: ::std::vec::Vec<::std::any::TypeId> =
+                            ::std::vec::Vec::new();
+                        let mut __missing_names: ::std::vec::Vec<&'static str> =
+                            ::std::vec::Vec::new();
+                        let mut __k = 0usize;
+                        while __k < __deps.len() {
+                            if !builder.contains(__deps[__k]) {
+                                __missing_ids.push(__deps[__k]);
+                                __missing_names.push(*__dep_names.get(__k).unwrap_or(&"?"));
+                            }
+                            __k += 1;
+                        }
                         // A pure cycle: every dependency this provider still lacks
                         // is one another *pending* provider would supply. Otherwise
                         // a required provider is simply absent.
-                        if !__missing_deps.is_empty()
-                            && __missing_deps.iter().all(|__id| __pending_keys.contains(__id))
+                        if !__missing_ids.is_empty()
+                            && __missing_ids.iter().all(|__id| __pending_keys.contains(__id))
                         {
                             __cyclic.push(#name_lit);
                         } else {
-                            __unprovided.push(#name_lit);
+                            __unprovided.push(::std::format!(
+                                "{} (needs {})", #name_lit, __missing_names.join(", ")
+                            ));
                         }
                     }
                 };
@@ -415,7 +433,8 @@ pub fn module(args: TokenStream, input: TokenStream) -> TokenStream {
                         ::std::vec::Vec::new();
                     #(#key_pushes)*
                     let mut __cyclic: ::std::vec::Vec<&'static str> = ::std::vec::Vec::new();
-                    let mut __unprovided: ::std::vec::Vec<&'static str> = ::std::vec::Vec::new();
+                    let mut __unprovided: ::std::vec::Vec<::std::string::String> =
+                        ::std::vec::Vec::new();
                     #(#classifies)*
                     if !__unprovided.is_empty() {
                         ::std::panic!(
