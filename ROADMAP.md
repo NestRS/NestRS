@@ -24,6 +24,15 @@ The authoritative record of *what was decided and why* is
   request-scoped `Ability`, carried into the GraphQL context by a per-request
   bridge in `nestrs-graphql`.
 - **CORS** — `HttpTransport::cors(...)` (the `app.enableCors` analog).
+- **Optional dependencies** — `#[inject] Option<Arc<T>>` (the `@Optional` analog),
+  resolved leniently and independent of `providers = [...]` order.
+- **Config validation** — `nestrs_config::load_validated` runs a config type's
+  `validator` rules at startup, so a malformed environment fails fast.
+- **Events** — `nestrs-events`: a typed in-process event bus and an
+  `#[event_handler]` decorator (the `@nestjs/event-emitter` analog), wired at
+  application bootstrap from the assembled container.
+- **Telemetry fail-fast** — importing `TelemetryModule` without `Telemetry::init`
+  now fails at boot rather than dropping traces and metrics silently.
 
 ## Now — stabilising the alpha
 
@@ -44,16 +53,13 @@ These are known, deliberate omissions called out in the code today:
   only (`ms` / `s` / `m` / `h`), pending a parser that clears the dependency bar.
 - **Dependency-injection scopes** — request- and transient-scoped providers. The
   container is singleton-only today; per-request state is carried ad hoc through
-  extractors and request-scoped DataLoaders.
-- **Events** — an event bus and an `#[event_handler]` decorator, the
-  discovered-concern analog of `@nestjs/event-emitter`.
+  extractors and request-scoped DataLoaders. (Open design question: whether to
+  build real scopes or document singleton-as-the-model — decide before coding.)
 - **`nestrs-resource`** — relations, enums, and pagination types for the
   entity-to-API resource macro, which is experimental today.
-- **API versioning** — per-route / per-controller version selection. (CORS and
-  global exception filters already ship — `HttpTransport::cors` and the
-  middleware `Filter` category, the `@Catch` analog.)
-- **Config** — a validated, injectable config service, plus optional
-  dependencies (`Option<Arc<T>>`, the `@Optional` analog).
+- **API versioning** — per-route / per-controller version selection. (CORS already
+  ships as `HttpTransport::cors`; global exception filters as the middleware
+  `Filter` category, the `@Catch` analog.)
 
 ## Later — exploring
 
