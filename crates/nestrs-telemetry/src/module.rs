@@ -32,6 +32,19 @@ impl Module for TelemetryModule {
         if !builder.mark_registered(std::any::TypeId::of::<Self>()) {
             return builder;
         }
+        // Fail fast on the documented ordering contract: without `Telemetry::init`
+        // the global tracer/meter are no-ops, so traces and metrics would be
+        // dropped *silently*. A clear boot panic beats that — the global init has
+        // no `Result` we can thread back through `Module::register`.
+        if !crate::telemetry::initialized() {
+            panic!(
+                "TelemetryModule was imported without calling `Telemetry::init` first — \
+                 the global tracer and meter are no-ops, so traces and metrics would be \
+                 silently dropped. Add `let _telemetry = \
+                 nestrs_telemetry::Telemetry::init(\"<service>\")?;` at the top of `main`, \
+                 before building the app."
+            );
+        }
         // The interceptor is the feature's discoverable HTTP surface: its
         // `Discoverable::register` attaches the `HttpInterceptorMeta` the transport
         // reads, so `imports = [TelemetryModule]` wires it without the app naming it.

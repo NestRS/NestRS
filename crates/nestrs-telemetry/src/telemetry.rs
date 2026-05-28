@@ -3,8 +3,24 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, Registry};
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use crate::config::{LogFormat, TelemetryConfig};
 use crate::error::TelemetryError;
+
+/// Set once [`Telemetry::init`] succeeds. [`TelemetryModule`](crate::TelemetryModule)
+/// reads it to fail fast rather than register no-op telemetry providers when an
+/// app forgot to initialise.
+static INITIALIZED: AtomicBool = AtomicBool::new(false);
+
+/// Whether [`Telemetry::init`] / [`Telemetry::init_with`] has run successfully.
+pub(crate) fn initialized() -> bool {
+    INITIALIZED.load(Ordering::Relaxed)
+}
+
+fn mark_initialized() {
+    INITIALIZED.store(true, Ordering::Relaxed);
+}
 
 /// Active telemetry instance. Returned by [`Telemetry::init`] and dropped at
 /// the end of `main` — Drop synchronously flushes pending traces, metrics and
@@ -58,6 +74,7 @@ impl Telemetry {
                 .with(appender_layer)
                 .try_init()
                 .map_err(|e| TelemetryError::Init(e.to_string()))?;
+            mark_initialized();
 
             tracing::info!(
                 service = %config.service_name,
@@ -82,6 +99,7 @@ impl Telemetry {
                 .with(fmt_layer)
                 .try_init()
                 .map_err(|e| TelemetryError::Init(e.to_string()))?;
+            mark_initialized();
             tracing::info!(
                 service = %config.service_name,
                 log_format = ?config.log_format,
