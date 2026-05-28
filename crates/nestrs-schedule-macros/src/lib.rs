@@ -38,7 +38,7 @@ pub fn cron_job(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     let mut item = parse_macro_input!(input as ItemStruct);
-    let InjectableBody { ctor, dep_keys } = match build_injectable_body(&mut item) {
+    let InjectableBody { ctor, dep_keys, .. } = match build_injectable_body(&mut item) {
         Ok(body) => body,
         Err(err) => return err.to_compile_error().into(),
     };
