@@ -4,30 +4,29 @@ use std::sync::Arc;
 use anyhow::Result;
 use nestrs_core::{hooks, injectable};
 use nestrs_graphql::dataloader;
+use nestrs_orm::Repo;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, PaginatorTrait,
-    QueryFilter, Set,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter,
+    Set,
 };
 use uuid::Uuid;
 use validator::Validate;
 
 use crate::users::entity::{self, ActiveModel, CreateUserInput, Entity as Users, User};
 
-pub const ORG_ACME: Uuid = Uuid::from_u128(0x0000_0000_0000_0000_0000_0000_0000_ac3e);
-
 #[injectable]
 pub struct UsersService {
+    // Held for the dataloaders' keyed batch queries and the shutdown hook, which
+    // run outside a request's ambient scope. Request-path reads/writes go through
+    // `Repo`, which carries the ambient executor (the transaction) and the
+    // caller's row-level filter transparently.
     #[inject]
     db: Arc<DatabaseConnection>,
 }
 
 impl UsersService {
-    pub async fn list(&self, scope: Condition) -> Result<Vec<entity::Model>> {
-        Ok(Users::find().filter(scope).all(self.db.as_ref()).await?)
-    }
-
-    pub async fn find(&self, id: Uuid) -> Result<Option<entity::Model>> {
-        Ok(Users::find_by_id(id).one(self.db.as_ref()).await?)
+    pub async fn list(&self) -> Result<Vec<entity::Model>> {
+        Ok(Repo::<Users>::all().await?)
     }
 
     pub async fn create(&self, input: CreateUserInput, org_id: Uuid) -> Result<entity::Model> {
@@ -38,7 +37,8 @@ impl UsersService {
             name: Set(input.name),
             email: Set(input.email),
         };
-        Ok(row.insert(self.db.as_ref()).await?)
+        let conn = Repo::<Users>::conn()?;
+        Ok(row.insert(&conn).await?)
     }
 }
 
@@ -98,6 +98,8 @@ impl UsersService {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ORG_ACME: Uuid = Uuid::from_u128(0x0000_0000_0000_0000_0000_0000_0000_ac3e);
 
     fn service() -> UsersService {
         UsersService {

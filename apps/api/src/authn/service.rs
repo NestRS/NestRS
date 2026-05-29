@@ -3,7 +3,8 @@
 
 use std::sync::Arc;
 
-use nestrs_auth::{AuthError, JwtService};
+use anyhow::Result;
+use nestrs_auth::JwtService;
 use nestrs_core::injectable;
 use uuid::Uuid;
 
@@ -18,11 +19,11 @@ pub struct AuthService {
 impl AuthService {
     /// Mint a bearer token for a caller: build the claims, stamp the configured
     /// expiry, and sign. A real app would gate this behind a credential check.
-    pub fn issue(&self, org_id: Uuid, roles: Vec<Role>) -> Result<String, AuthError> {
-        self.jwt.sign(&Claims {
+    pub fn issue(&self, org_id: Uuid, roles: Vec<Role>) -> Result<String> {
+        Ok(self.jwt.sign(&Claims {
             org_id,
             roles,
             exp: self.jwt.expiry(),
-        })
+        })?)
     }
 }

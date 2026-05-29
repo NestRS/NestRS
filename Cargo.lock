@@ -176,6 +176,7 @@ dependencies = [
  "db",
  "nestrs-auth",
  "nestrs-authz",
+ "nestrs-authz-graphql",
  "nestrs-authz-http",
  "nestrs-core",
  "nestrs-graphql",
@@ -184,7 +185,6 @@ dependencies = [
  "nestrs-middleware",
  "nestrs-openapi",
  "nestrs-orm",
- "nestrs-pipes",
  "nestrs-resource",
  "nestrs-server-timing",
  "nestrs-telemetry",
@@ -2530,6 +2530,7 @@ dependencies = [
  "sea-orm",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2541,10 +2542,14 @@ dependencies = [
  "nestrs-core",
  "nestrs-graphql",
  "nestrs-http",
+ "nestrs-middleware",
+ "nestrs-orm",
  "nestrs-testing",
+ "poem",
  "sea-orm",
  "serde_json",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -2554,10 +2559,12 @@ dependencies = [
  "nestrs-authz",
  "nestrs-core",
  "nestrs-http",
+ "nestrs-orm",
  "poem",
  "sea-orm",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -2737,8 +2744,14 @@ name = "nestrs-orm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-trait",
+ "nestrs-authz",
  "nestrs-core",
+ "nestrs-http",
+ "nestrs-middleware",
+ "poem",
  "sea-orm",
+ "tokio",
  "tracing",
 ]
 
@@ -3419,6 +3432,7 @@ version = "3.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f977080932c87287147dca052951c3e2696f8759863f6b4e4c0c9ffe7a4cc8b"
 dependencies = [
+ "anyhow",
  "base64",
  "bytes",
  "futures-util",

@@ -15,3 +15,5 @@ sea-orm.workspace = true
 # binding of this engine lives in `nestrs-authz-http`.)
 serde.workspace = true
 serde_json.workspace = true
+# The ambient request `Ability` is carried in a `tokio::task_local!`.
+tokio.workspace = true

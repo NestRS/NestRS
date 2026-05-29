@@ -14,6 +14,10 @@
 //! parameter (which `#[query]` / `#[mutation]` forward natively) and
 //! `ctx.data_opt::<T>()` — no `#[resolver]` macro support is required.
 
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+
 use async_graphql::{BatchRequest, Executor, Request as GqlRequest};
 use async_graphql_poem::{GraphQLBatchRequest, GraphQLBatchResponse};
 use nestrs_core::Container;
@@ -41,6 +45,37 @@ pub struct ContextSeed {
 
 inventory::collect!(ContextSeed);
 
+/// A boxed `Send` future — the object-safe currency an [`OperationGuard`] passes
+/// the operation's execution through.
+pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+
+/// A per-operation guard the GraphQL endpoint runs around every request — the
+/// resolver-side analog of HTTP's `RouteResponseShaper`. The surface stays
+/// authorization-agnostic: `nestrs-graphql` only defines this seam and resolves
+/// an optional implementor from the container; `nestrs-authz-graphql`'s
+/// `GraphqlAbilityBridge` implements it to authenticate the request and install
+/// the caller's ambient `Ability` for the whole operation.
+///
+/// Bind an implementor with `providers = [MyBridge as dyn OperationGuard]`; the
+/// endpoint resolves it via the container (`get_dyn`). With none registered the
+/// endpoint runs operations unguarded — exactly the prior behaviour.
+pub trait OperationGuard: Send + Sync + 'static {
+    /// Run before the operation is parsed and seeded into the GraphQL context.
+    /// Authenticate and attach per-request state (e.g. the caller's `Ability`)
+    /// to the poem request, where a [`ContextSeed`] forwards it into the
+    /// context. Best-effort: an unauthenticated request is left without that
+    /// state, and the resolvers' own gate then refuses it.
+    fn before<'a>(&'a self, req: &'a mut Request) -> BoxFuture<'a, ()>;
+
+    /// Wrap the operation's execution — e.g. installing the caller's ability as
+    /// ambient state for its duration so the data layer scopes every read.
+    fn around<'a>(
+        &'a self,
+        req: &'a Request,
+        inner: BoxFuture<'a, Response>,
+    ) -> BoxFuture<'a, Response>;
+}
+
 /// The `/graphql` endpoint [`GraphqlModule`](crate::GraphqlModule) mounts. It
 /// mirrors `async_graphql_poem::GraphQL`'s GET / POST / batch handling but folds
 /// every [`ContextSeed`] over the request first, so per-request context reaches
@@ -50,13 +85,18 @@ inventory::collect!(ContextSeed);
 pub(crate) struct ContextEndpoint<E> {
     executor: E,
     container: Container,
+    /// The per-operation guard, resolved once from the container at mount. `None`
+    /// when no app bound one — the endpoint then runs operations unguarded.
+    op_guard: Option<Arc<dyn OperationGuard>>,
 }
 
 impl<E> ContextEndpoint<E> {
     pub(crate) fn new(executor: E, container: Container) -> Self {
+        let op_guard = container.get_dyn::<dyn OperationGuard>();
         Self {
             executor,
             container,
+            op_guard,
         }
     }
 
@@ -69,7 +109,12 @@ impl<E: Executor> Endpoint for ContextEndpoint<E> {
     type Output = Response;
 
     async fn call(&self, req: Request) -> Result<Response> {
-        let (req, mut body) = req.split();
+        let (mut req, mut body) = req.split();
+        // The guard runs *before* parsing/seeding so the state it attaches (the
+        // caller's ability/actor) is on the request when the seeds forward it.
+        if let Some(guard) = &self.op_guard {
+            guard.before(&mut req).await;
+        }
         let batch = GraphQLBatchRequest::from_request(&req, &mut body).await?.0;
         let batch = match batch {
             BatchRequest::Single(r) => BatchRequest::Single(self.seed(&req, r)),
@@ -77,6 +122,20 @@ impl<E: Executor> Endpoint for ContextEndpoint<E> {
                 BatchRequest::Batch(rs.into_iter().map(|r| self.seed(&req, r)).collect())
             }
         };
-        Ok(GraphQLBatchResponse(self.executor.execute_batch(batch).await).into_response())
+        // The guard wraps execution so it can install ambient state (the
+        // ability) for the operation's whole duration. With no guard, run the
+        // batch directly — no boxing, exactly the prior behaviour.
+        let response = match &self.op_guard {
+            Some(guard) => {
+                let inner: BoxFuture<Response> = Box::pin(async {
+                    GraphQLBatchResponse(self.executor.execute_batch(batch).await).into_response()
+                });
+                guard.around(&req, inner).await
+            }
+            None => {
+                GraphQLBatchResponse(self.executor.execute_batch(batch).await).into_response()
+            }
+        };
+        Ok(response)
     }
 }

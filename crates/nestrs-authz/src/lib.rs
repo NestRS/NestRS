@@ -17,6 +17,7 @@
 mod ability;
 mod action;
 mod builder;
+mod context;
 mod factory;
 mod predicate;
 mod subject;
@@ -24,6 +25,7 @@ mod subject;
 pub use ability::{Ability, FieldSet};
 pub use action::{Action, ActionMarker, Create, Delete, Manage, Read, Update};
 pub use builder::{AbilityBuilder, RuleSpec};
+pub use context::{current_ability, with_ability};
 pub use factory::AbilityFactory;
 pub use predicate::{Predicate, PredicateBuilder};
 pub use subject::Subject;

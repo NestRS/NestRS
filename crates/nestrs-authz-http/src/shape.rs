@@ -1,26 +1,33 @@
-//! Transparent response masking: `Authorize<A, S>` implements
-//! [`RouteResponseShaper`], so `#[routes]` rewrites a handler's response to drop
-//! the rows and fields the caller's ability does not permit — no `mask` call in
-//! the handler. The body is parsed back into `S::Model` and run through the same
-//! typed [`Ability::mask`]/[`Ability::mask_many`] the engine already uses, so
-//! there is no second masking implementation to keep in step.
+//! Two transparent jobs `Authorize<A, S>` does as a [`RouteResponseShaper`], both
+//! keyed on the caller's ability that the guard attached:
+//!
+//! 1. **Ambient ability** — [`run`](RouteResponseShaper::run) wraps the handler in
+//!    [`with_ability`], so the data layer (`nestrs-orm`'s `Repo`) reads the
+//!    caller's ability via `current_ability()` and scopes every query — the
+//!    developer writes no filter.
+//! 2. **Response masking** — after the handler, the body is parsed back into
+//!    `S::Model` and run through the same typed [`Ability::mask`]/
+//!    [`Ability::mask_many`] the engine already uses, dropping the rows and fields
+//!    the ability does not permit — no `mask` call in the handler, and no second
+//!    masking implementation to keep in step.
 //!
 //! Masking is a security control, so this fails *closed*: a successful JSON body
 //! that does not deserialize into `S::Model` (a handler/subject mismatch) yields
 //! a `500` rather than shipping the data unmasked. The whole body is buffered to
 //! mask it, so masked list endpoints should be paginated.
 
+use std::future::Future;
 use std::sync::Arc;
 
 use nestrs_http::RouteResponseShaper;
 use poem::http::StatusCode;
-use poem::{Request, Response};
+use poem::{Request, Response, Result};
 use sea_orm::EntityTrait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
 
-use nestrs_authz::{Ability, Action, ActionMarker};
+use nestrs_authz::{with_ability, Ability, Action, ActionMarker};
 
 use crate::extractor::Authorize;
 
@@ -36,13 +43,20 @@ where
         req.extensions().get::<Arc<Ability>>().cloned()
     }
 
-    async fn shape(captured: Self::Captured, resp: Response) -> Response {
+    async fn run<F>(captured: Self::Captured, inner: F) -> Result<Response>
+    where
+        F: Future<Output = Result<Response>> + Send,
+    {
+        // Install the ability as ambient state for the handler (and the services
+        // it calls), so the data layer can scope queries; then mask what comes
+        // back. A missing ability means the `Authorize` extractor already rejected
+        // the request with a 500, so this branch only carries it through.
         match captured {
-            Some(ability) => mask_response::<S>(&ability, A::ACTION, resp).await,
-            // Capture runs before the handler, whose `Authorize` extractor has
-            // already rejected a missing ability with a 500 — so a successful
-            // response here always carried one. Pass the (error) response through.
-            None => resp,
+            Some(ability) => {
+                let resp = with_ability(ability.clone(), inner).await?;
+                Ok(mask_response::<S>(&ability, A::ACTION, resp).await)
+            }
+            None => inner.await,
         }
     }
 }

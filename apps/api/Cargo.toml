@@ -9,13 +9,13 @@ nestrs-core.workspace = true
 nestrs-auth.workspace = true
 nestrs-authz.workspace = true
 nestrs-authz-http.workspace = true
+nestrs-authz-graphql.workspace = true
 nestrs-graphql.workspace = true
 nestrs-health.workspace = true
 nestrs-http.workspace = true
 nestrs-middleware.workspace = true
 nestrs-openapi.workspace = true
 nestrs-orm.workspace = true
-nestrs-pipes.workspace = true
 nestrs-resource.workspace = true
 nestrs-server-timing.workspace = true
 nestrs-telemetry = { workspace = true, features = ["http"] }

@@ -12,6 +12,20 @@ The authoritative record of *what was decided and why* is
 
 ## Recently shipped
 
+- **Transparent security, conversion & transactions** — the mission's hardest
+  promise, now built on one primitive: a request-scoped *data context* (two
+  `tokio` task-locals carrying the current DB executor and the caller's `Ability`).
+  A service queries through `Repo<E>` (`nestrs-orm`) — every call runs against the
+  ambient executor and every read is filtered by the caller's `condition_for`, so
+  **row-level security and transactions need no hand-written code**. An
+  auto-installed `DbContext` interceptor (just import `DatabaseModule`) makes the
+  executor ambient and wraps each mutating request in a transaction (commit on
+  2xx/3xx, roll back otherwise). The `Bind<E, A>` extractor is **route-model
+  binding** (path id → loaded, authorized entity, with `400`/`404`/`403`
+  short-circuits), and `Scope<E, A>` yields the row filter as an explicit argument.
+  `apps/api` is the exemplar — `UsersController::get` is a single `Bind` parameter
+  and `create` is transactional with no annotation. See *The data layer makes
+  security and transactions transparent* in [CLAUDE.md](CLAUDE.md).
 - **Rate limiting** — `nestrs-throttler`: a per-route `ThrottlerGuard`
   (`#[use_guards(ThrottlerGuard)]`) reading an optional `#[meta(Throttle::...)]`
   override (the `@nestjs/throttler` `ThrottlerGuard` + `@Throttle` analog), backed
@@ -123,22 +137,28 @@ standout gaps here, now ship — see *Recently shipped*.) The verdict on what is
   `string`. Documenting security schemes becomes the highest-value fix once auth
   lands.
 
-## Next — making the hard parts transparent
+## Next — extending the transparent data layer
 
-The project's mission (see [CLAUDE.md](CLAUDE.md)): the developer writes business
-logic; the framework carries security, transactions, and conversion so they never
-have to. These are the concrete steps toward that — they go *beyond* what NestJS
-itself automates, and each removes hand-written plumbing from app code.
+The transparent data context (see *Recently shipped*) covers HTTP today. What
+remains builds on the same primitive:
 
-- **Entity-binding pipes** — a pipe that resolves an `id` to its loaded entity, so
-  a handler (and the service behind it) receives the domain object, not the
-  scalar — route-model binding. Needs a pipe with container/repository access, an
-  extension of today's stateless `nestrs-pipes` model.
-- **Automatic row-level filtering** — the authorization `Ability`'s `condition_for`
-  applied to a query *by the framework*, not hand-called in each service method,
-  so a feature cannot forget to scope its reads to what the caller may see.
-- **Transparent transactions** — an interceptor (or native ORM support) wraps a
-  handler in a transaction automatically, so a developer never threads one by hand.
+- **A reusable GraphQL auth bridge + scoped dataloaders** — `apps/api` already
+  scopes GraphQL the same as REST: a `GraphqlAuth` interceptor runs the guard chain
+  on `/graphql` and installs the ambient ability, so resolver `Repo` reads filter by
+  org and `authorize::<A, S>(ctx)` gates each resolver. Two gaps remain. First, that
+  bridge is hand-wired per app; a generic `GraphqlAuth<S, F>` (parameterized by the
+  app's `Strategy` + `AbilityFactory`, like `AuthGuard<S>`) would move it into the
+  framework. Second, a `#[dataloader]` batch runs off the request task, so the
+  ambient ability never reaches it — a field-relation loader read is unscoped and
+  must be confined by hand today (e.g. filtering to the parent's org). Threading the
+  request ability into the per-request loaders would close that.
+- **Ability-scoped writes** — `Repo` auto-scopes *reads*; an update/delete could
+  likewise gate its `WHERE` on `condition_for(Update/Delete)`, so a caller cannot
+  mutate a row outside its scope even by id.
+- **A request executor for non-HTTP transports** — the `DbContext` interceptor binds
+  the executor to an HTTP request; a queue job or cron tick has no ambient executor,
+  so those paths still inject `Arc<DatabaseConnection>`. A transport-agnostic
+  installer would extend `Repo` (and per-job transactions) to the worker surfaces.
 
 ## Next — project & release infrastructure
 
