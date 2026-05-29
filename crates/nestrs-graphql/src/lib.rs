@@ -22,6 +22,10 @@ mod resolver;
 /// the bridge a resolver (and GraphQL authorization) reads request-scoped state
 /// through. Submit one with `inventory`.
 pub use context::ContextSeed;
+/// The per-operation seam the endpoint runs around every request (authenticate,
+/// then wrap execution with ambient state). Implemented by `nestrs-authz-graphql`,
+/// bound with `providers = [MyBridge as dyn OperationGuard]`.
+pub use context::{BoxFuture, OperationGuard};
 pub use module::{GraphqlModule, GraphqlOptions, GraphqlSetup};
 // `pub` only so `#[resolver]`/`#[dataloader]`-generated code can name them;
 // `#[doc(hidden)]` at their definitions keeps them out of the app-facing surface.

@@ -1,12 +1,13 @@
 use std::sync::Arc;
 
 use async_graphql::dataloader::DataLoader;
-use async_graphql::Result;
+use async_graphql::{Context, Result};
+use nestrs_authz::{Create, Read};
+use nestrs_authz_graphql::{authorize, bind};
 use nestrs_graphql::resolver;
 use uuid::Uuid;
 
-use crate::errors::gql;
-use crate::orgs::entity::{CreateOrgInput, Org};
+use crate::orgs::entity::{self, CreateOrgInput, Org};
 use crate::orgs::service::OrgsService;
 use crate::users::entity::User;
 use crate::users::service::UsersServiceByOrg;
@@ -20,26 +21,27 @@ pub struct OrgsResolver {
 #[resolver]
 impl OrgsResolver {
     #[query]
-    async fn orgs(&self) -> Result<Vec<Org>> {
-        let rows = self.orgs.list().await.map_err(gql)?;
+    async fn orgs(&self, ctx: &Context<'_>) -> Result<Vec<Org>> {
+        authorize::<Read, entity::Entity>(ctx)?;
+        // Scoped to the caller's org by the ambient ability (an admin sees all).
+        let rows = self.orgs.list().await?;
         Ok(rows.iter().map(Org::from).collect())
     }
 
     #[query]
-    async fn org(&self, id: String) -> Result<Option<Org>> {
-        let id = Uuid::parse_str(&id).map_err(gql)?;
-        Ok(self
-            .orgs
-            .find(id)
-            .await
-            .map_err(gql)?
+    async fn org(&self, ctx: &Context<'_>, id: String) -> Result<Option<Org>> {
+        // `bind`: parse the id, load the org, instance-check — same shape as the
+        // controller's `Bind`.
+        Ok(bind::<entity::Entity, Read>(ctx, &id)
+            .await?
             .as_ref()
             .map(Org::from))
     }
 
     #[mutation]
-    async fn create_org(&self, input: CreateOrgInput) -> Result<Org> {
-        let row = self.orgs.create(input).await.map_err(gql)?;
+    async fn create_org(&self, ctx: &Context<'_>, input: CreateOrgInput) -> Result<Org> {
+        authorize::<Create, entity::Entity>(ctx)?;
+        let row = self.orgs.create(input).await?;
         Ok(Org::from(&row))
     }
 
@@ -49,7 +51,7 @@ impl OrgsResolver {
         parent: &Org,
         by_org: &DataLoader<UsersServiceByOrg>,
     ) -> Result<Vec<User>> {
-        let id = Uuid::parse_str(&parent.id).map_err(gql)?;
+        let id = Uuid::parse_str(&parent.id)?;
         Ok(by_org.load_one(id).await?.unwrap_or_default())
     }
 }

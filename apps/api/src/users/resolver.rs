@@ -1,16 +1,17 @@
 use std::sync::Arc;
 
 use async_graphql::dataloader::DataLoader;
-use async_graphql::Result;
+use async_graphql::{Context, Result};
+use nestrs_authz::{Create, Read};
+use nestrs_authz_graphql::{authorize, bind};
 use nestrs_graphql::resolver;
-use sea_orm::Condition;
 use uuid::Uuid;
 
-use crate::errors::gql;
+use crate::authn::AuthUser;
 use crate::orgs::entity::Org;
 use crate::orgs::service::OrgsServiceById;
-use crate::users::entity::{CreateUserInput, User};
-use crate::users::service::{UsersService, UsersServiceByName, ORG_ACME};
+use crate::users::entity::{self, CreateUserInput, User};
+use crate::users::service::{UsersService, UsersServiceByName};
 
 #[resolver]
 pub struct UsersResolver {
@@ -21,26 +22,28 @@ pub struct UsersResolver {
 #[resolver]
 impl UsersResolver {
     #[query]
-    async fn users(&self) -> Result<Vec<User>> {
-        let rows = self.users.list(Condition::all()).await.map_err(gql)?;
+    async fn users(&self, ctx: &Context<'_>) -> Result<Vec<User>> {
+        authorize::<Read, entity::Entity>(ctx)?;
+        // Scoped to the caller's org by the ambient ability — no filter by hand.
+        let rows = self.users.list().await?;
         Ok(rows.iter().map(User::from).collect())
     }
 
     #[query]
-    async fn user(&self, id: String) -> Result<Option<User>> {
-        let id = Uuid::parse_str(&id).map_err(gql)?;
-        Ok(self
-            .users
-            .find(id)
-            .await
-            .map_err(gql)?
+    async fn user(&self, ctx: &Context<'_>, id: String) -> Result<Option<User>> {
+        // `bind` parses the id, loads the entity, and runs the instance check —
+        // the resolver analog of the controller's `Bind` parameter.
+        Ok(bind::<entity::Entity, Read>(ctx, &id)
+            .await?
             .as_ref()
             .map(User::from))
     }
 
     #[mutation]
-    async fn create_user(&self, input: CreateUserInput) -> Result<User> {
-        let row = self.users.create(input, ORG_ACME).await.map_err(gql)?;
+    async fn create_user(&self, ctx: &Context<'_>, input: CreateUserInput) -> Result<User> {
+        authorize::<Create, entity::Entity>(ctx)?;
+        let actor = ctx.data::<AuthUser>()?;
+        let row = self.users.create(input, actor.org_id).await?;
         Ok(User::from(&row))
     }
 
@@ -60,9 +63,13 @@ impl UsersResolver {
             .load_one(parent.name.clone())
             .await?
             .unwrap_or_default();
+        // A dataloader runs its batch off the request task, so the ambient
+        // ability does not reach it — its read is unscoped. We confine the result
+        // to the parent's own org (the parent is already within the caller's
+        // scope), so no cross-org row leaks through this field.
         Ok(same_name
             .into_iter()
-            .filter(|u| u.id != parent.id)
+            .filter(|u| u.id != parent.id && u.org_id == parent.org_id)
             .collect())
     }
 }

@@ -52,16 +52,19 @@ conversion. Each concern has one home, and a handler only wires them together:
 
 - a **Guard** decides access and attaches request context (the caller, a tenant);
 - a **Pipe** converts and validates an input *at the edge* — the target is to hand
-  the handler a domain object, not a raw scalar (resolve an `id` to its entity in
-  the pipe, so the service receives the entity);
+  the handler a domain object, not a raw scalar (resolving an `id` to its loaded
+  entity is the same edge conversion; but because a `Pipe` is stateless with no
+  container access, that DB-backed binding is the `Bind` extractor, not a `Pipe`
+  — see *The data layer makes security and transactions transparent* below);
 - a **Service** holds the business logic;
 - an **Interceptor** carries cross-cutting work (e.g. wrapping a handler in a DB
   transaction) so the developer never writes it by hand.
 
 If a handler is doing conversion, a permission check, or transaction management
-inline, that is drift — push it into the matching layer above. The unbuilt steps
-toward full transparency (entity-binding pipes, auto-applied row filters, implicit
-transactions) are tracked in the roadmap.
+inline, that is drift — push it into the matching layer above. The three concerns
+that took the project beyond NestJS — route-model binding, automatic row-level
+filtering, and implicit transactions — now ship; see *The data layer makes
+security and transactions transparent* below.
 
 ## Dependency injection is internal
 
@@ -349,6 +352,91 @@ drives the exchange, so the crate adds no second HTTP client. The flat container
 keys by type, so one app wires one `OAuth2Client` today; multiple providers would
 need per-provider newtypes. `apps/api` is the exemplar (bearer login + a
 GitHub-style OAuth redirect).
+
+## The data layer makes security and transactions transparent
+
+The mission's hardest promise — that a developer writes no row-level filter and no
+transaction by hand — is kept by one primitive: a **request-scoped data context**
+held in two `tokio::task_local!`s, because a singleton service has no other way to
+read per-request state (it cannot inject a request-scoped provider — the model is
+one level deep). The two task-locals are:
+
+- the **executor** (`nestrs-orm`'s `Executor`: `Pool(Arc<DatabaseConnection>)` or
+  `Txn(Arc<DatabaseTransaction>)`). SeaORM's `ConnectionTrait` has generic methods,
+  so it is not object-safe; `Executor` is an enum that *implements* it by forwarding
+  the five non-generic methods, so one `&Executor` drives any query as either a pool
+  or a transaction.
+- the **ability** (`nestrs-authz`'s ambient `Arc<Ability>`, read by `current_ability`).
+
+A service queries through **`Repo<E>`** (`nestrs-orm`) instead of holding a
+connection: every call runs against the ambient executor (so it joins the request's
+transaction with nothing threaded through), and every *read* is filtered by
+`condition_for` from the ambient ability (so a feature cannot forget to scope its
+reads — with no ambient ability the filter is `TRUE`, i.e. unscoped). `Repo` requires
+an ambient executor and errors otherwise; a non-request context (a dataloader's
+keyed batch, a shutdown hook) keeps an injected `Arc<DatabaseConnection>` and queries
+it directly. Writes take the ambient executor with `Repo::<E>::conn()`.
+
+The two task-locals are installed at **different depths**, dictated by when each
+value exists:
+
+- the **executor** is installed *outermost* by the auto-registered `DbContext`
+  interceptor (`nestrs-orm`, activated just by importing `DatabaseModule` — its
+  `DynamicModule::register` calls the interceptor's `Discoverable::register`, which
+  builds in the register phase, after the connection factory). A **safe** method
+  (GET/HEAD/OPTIONS/TRACE) runs on the pool; a **mutating** method runs in a
+  transaction opened there and committed on a 2xx/3xx response, rolled back
+  otherwise (the txn is shared as an `Arc` for the handler's duration, then
+  reclaimed with `Arc::try_unwrap` to commit — a lingering reference falls back to
+  `Drop`'s rollback). So the executor is available to guards and handlers alike.
+- the **ability** is installed *inside the per-route guards* — the only seam that
+  runs after `AbilityGuard` built it and still wraps the handler future is the
+  `#[routes]` **shaper**. So the `RouteResponseShaper` trait (`nestrs-http`) is
+  `capture` + `run(captured, inner)`: `run` *wraps* the handler future, and
+  `Authorize`'s impl (`nestrs-authz-http`) uses it to scope `with_ability` around the
+  handler (then mask the response). This keeps `nestrs-http` unaware of authz/ORM —
+  the wrap lives in `nestrs-authz-http`, which depends on both.
+
+Two HTTP extractors (`nestrs-authz-http`) hand the handler a ready argument:
+
+- **`Bind<E, A>`** — route-model binding: parse the path id (UUID v7 → `400`), load
+  the row through the ambient executor (`404` if absent), instance-check the caller's
+  ability (`403` if denied — existence is *not* hidden, matching the gate), else hand
+  over the loaded `E::Model`. It is an *extractor*, not a `Pipe`, because loading needs
+  the DB. A route using `Bind` must also bind an `AbilityGuard` (it reads the ability).
+- **`Scope<E, A>`** — the explicit, Tier-1 counterpart to `Repo`'s transparent
+  scoping: yields the `condition_for` `Condition` as an argument, for a handler that
+  builds its own query.
+
+`apps/api` is the exemplar: `UsersController::get` is one `Bind` parameter, `list`
+takes no filter (the ambient ability scopes `Repo::<Users>::all()`), and `create`
+runs in the request's transaction with no annotation. Dependency direction:
+`nestrs-orm` → `nestrs-authz` (for `condition_for`) and → `nestrs-http` (the
+interceptor); `nestrs-authz-http` → `nestrs-orm` (`Bind` loads). Acyclic.
+
+The HTTP `Authorize` shaper installs the ambient ability, so it is **HTTP-only by
+default** — but the same transparency extends to GraphQL through the *symmetric*
+seam. Just as `nestrs-http` exposes the authz-agnostic `RouteResponseShaper` that
+`nestrs-authz-http` implements, `nestrs-graphql` exposes an authz-agnostic
+**`OperationGuard`** seam (a per-operation `before` + `around` the `ContextEndpoint`
+runs, resolving an optional implementor from the container via `get_dyn`) that
+`nestrs-authz-graphql`'s **`GraphqlAbilityBridge<A, G>`** implements. The bridge is
+generic over the app's authentication guard `A` and ability guard `G`, so it runs
+the *same guard chain* the controllers use (`AuthGuard` + `AbilityGuard`) and then
+wraps the operation in `with_ability` — resolver `Repo` reads scope to the caller
+exactly like REST. Because the bridge lives **on the GraphQL endpoint** (not a
+global interceptor), `/graphql` is guarded without touching the public routes and
+non-GraphQL requests pay nothing. The app binds it behind a type alias and a one-line
+module (`apps/api`'s `AuthzGraphqlModule`: `GraphqlAbilityBridge<AuthGuard,
+AppAbilityGuard> as dyn OperationGuard`), keeping only the actor-forwarding
+`ContextSeed` (its principal type is app-specific). Each resolver still gates with
+`nestrs_authz_graphql::authorize::<A, S>(ctx)` (no token → no ambient ability →
+`FORBIDDEN`). **The one gotcha:** a `#[dataloader]` batch runs
+*off the request task*, so the ambient ability (and executor) do **not** reach it —
+a field resolver's loader read is unscoped, and a cross-org field must be confined
+another way (e.g. `UsersResolver::namesakes` filters to the parent's org, which is
+already in the caller's scope). Scoping the loaders themselves is still open (see
+the roadmap).
 
 ## Scheduling is the first concern proved out as its own crate
 

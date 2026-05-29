@@ -9,14 +9,26 @@ description = "GraphQL surface for nestrs-authz: forward the request-scoped Abil
 
 [dependencies]
 nestrs-authz.workspace = true
-# Re-uses the per-request context bridge (ContextSeed) and async-graphql re-export.
+# `GraphqlAbilityBridge` is an `#[injectable]` provider implementing the
+# `OperationGuard` seam.
+nestrs-core.workspace = true
+# Re-uses the per-request context bridge (ContextSeed), the `OperationGuard` seam,
+# and async-graphql re-export.
 nestrs-graphql.workspace = true
+# The bridge composes two `Guard`s (the app's authentication + ability guards).
+nestrs-middleware.workspace = true
+# `bind` loads the entity through the ambient request executor — the GraphQL analog
+# of `nestrs-authz-http`'s `Bind` extractor.
+nestrs-orm.workspace = true
+# The bridge runs guards against, and reads ambient state from, the poem request.
+poem.workspace = true
+sea-orm.workspace = true
+uuid.workspace = true
 
 [dev-dependencies]
 # The test exercises the gate through a real schema booted in-process: a SeaORM
 # entity is the authorization Subject, an HTTP guard injects the Ability, a
 # resolver gates on it.
-nestrs-core.workspace = true
 nestrs-http.workspace = true
 nestrs-testing.workspace = true
 # A crate that defines `#[resolver]`s needs async-graphql as a direct dependency,

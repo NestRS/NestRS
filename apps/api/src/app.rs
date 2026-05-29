@@ -9,7 +9,7 @@ use nestrs_telemetry::TelemetryModule;
 use nestrs_throttler::{Throttle, ThrottlerModule};
 
 use crate::authn::AuthnModule;
-use crate::authz::AuthzModule;
+use crate::authz::{AuthzGraphqlModule, AuthzModule};
 use crate::orgs::OrgsModule;
 use crate::users::UsersModule;
 
@@ -36,6 +36,7 @@ use crate::users::UsersModule;
         ThrottlerModule::for_root(Throttle::per_minute(60)),
         AuthnModule,
         AuthzModule,
+        AuthzGraphqlModule,
         OrgsModule,
         UsersModule,
         GraphqlModule::for_root(GraphqlOptions {

@@ -4,6 +4,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use nestrs_core::injectable;
 use nestrs_graphql::dataloader;
+use nestrs_orm::Repo;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use uuid::Uuid;
 use validator::Validate;
@@ -12,17 +13,17 @@ use crate::orgs::entity::{self, ActiveModel, CreateOrgInput, Entity as Orgs, Org
 
 #[injectable]
 pub struct OrgsService {
+    // Held for the `by_id` dataloader's keyed batch query, which runs outside a
+    // request's ambient scope. The request-path methods below reach the database
+    // through `Repo`, so they join the request transaction and scope reads to the
+    // caller's ability with nothing threaded by hand.
     #[inject]
     db: Arc<DatabaseConnection>,
 }
 
 impl OrgsService {
     pub async fn list(&self) -> Result<Vec<entity::Model>> {
-        Ok(Orgs::find().all(self.db.as_ref()).await?)
-    }
-
-    pub async fn find(&self, id: Uuid) -> Result<Option<entity::Model>> {
-        Ok(Orgs::find_by_id(id).one(self.db.as_ref()).await?)
+        Ok(Repo::<Orgs>::all().await?)
     }
 
     pub async fn create(&self, input: CreateOrgInput) -> Result<entity::Model> {
@@ -31,7 +32,8 @@ impl OrgsService {
             id: Set(Uuid::now_v7()),
             name: Set(input.name),
         };
-        Ok(row.insert(self.db.as_ref()).await?)
+        let conn = Repo::<Orgs>::conn()?;
+        Ok(row.insert(&conn).await?)
     }
 }
 

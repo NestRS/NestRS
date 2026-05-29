@@ -16,7 +16,6 @@ use uuid::Uuid;
 use crate::authn::oauth::OAuthGuard;
 use crate::authn::principal::{AuthUser, Role};
 use crate::authn::service::AuthService;
-use crate::errors::internal;
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct LoginRequest {
@@ -45,7 +44,7 @@ impl AuthController {
     #[api(summary = "Issue a JWT access token (demo issuer)", tags("Auth"))]
     async fn login(&self, body: Json<LoginRequest>) -> Result<Json<LoginResponse>> {
         let LoginRequest { org_id, roles } = body.0;
-        let access_token = self.auth.issue(org_id, roles).map_err(internal)?;
+        let access_token = self.auth.issue(org_id, roles)?;
         Ok(Json(LoginResponse { access_token }))
     }
 
@@ -64,10 +63,7 @@ impl AuthController {
     #[use_guards(OAuthGuard)]
     #[api(summary = "OAuth2 callback — issues the app's JWT", tags("Auth"))]
     async fn oauth_callback(&self, user: Ctx<AuthUser>) -> Result<Json<LoginResponse>> {
-        let access_token = self
-            .auth
-            .issue(user.org_id, user.roles.clone())
-            .map_err(internal)?;
+        let access_token = self.auth.issue(user.org_id, user.roles.clone())?;
         Ok(Json(LoginResponse { access_token }))
     }
 }
