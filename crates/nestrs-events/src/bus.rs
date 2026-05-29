@@ -16,7 +16,7 @@ type HandlerFn = Arc<dyn Fn(BoxedEvent) -> Pin<Box<dyn Future<Output = ()> + Sen
 
 /// A typed, in-process publish/subscribe bus. Register it by importing
 /// [`EventModule`](crate::EventModule); inject `Arc<EventBus>` into a provider to
-/// [`emit`](EventBus::emit). Every `#[event_handler]` for the emitted event type
+/// [`emit`](EventBus::emit). Every `#[on_event]` for the emitted event type
 /// runs. Handlers are filled in once at application bootstrap and the registry is
 /// read-only thereafter, so the `RwLock` is uncontended on the hot (`emit`) path.
 #[derive(Default)]
@@ -30,7 +30,7 @@ impl EventBus {
     }
 
     /// Register a handler for events of type `E`. Called by [`EventModule`]'s
-    /// bootstrap wiring for each discovered `#[event_handler]`; apps do not call
+    /// bootstrap wiring for each discovered `#[on_event]`; apps do not call
     /// it directly.
     pub fn subscribe<E, H, Fut>(&self, handler: H)
     where

@@ -1,12 +1,12 @@
 //! End-to-end: a producer injects the bus and emits; a discovered
-//! `#[event_handler]` (itself injecting a service) runs — wired at bootstrap from
+//! `#[on_event]` (itself injecting a service) runs — wired at bootstrap from
 //! the fully-assembled container.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 
 use nestrs_core::{injectable, module, App};
-use nestrs_events::{async_trait, event_handler, EventBus, EventHandler, EventModule};
+use nestrs_events::{async_trait, on_event, EventBus, EventHandler, EventModule};
 
 /// The event — any `Clone + Send + 'static` type.
 #[derive(Clone)]
@@ -21,7 +21,7 @@ struct Ledger {
     total: AtomicUsize,
 }
 
-#[event_handler]
+#[on_event]
 struct OnPointsAwarded {
     #[inject]
     ledger: Arc<Ledger>,

@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 
 /// Handles events of type [`Event`](EventHandler::Event). Implemented on an
-/// `#[event_handler]` struct; the [`EventBus`](crate::EventBus) builds the struct
+/// `#[on_event]` struct; the [`EventBus`](crate::EventBus) builds the struct
 /// from the container at bootstrap and calls [`handle`](EventHandler::handle) for
 /// every matching [`emit`](crate::EventBus::emit).
 #[async_trait]

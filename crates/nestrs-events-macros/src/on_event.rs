@@ -1,4 +1,4 @@
-//! `#[event_handler]` implementation: construction + `Discoverable` attaching an
+//! `#[on_event]` implementation: construction + `Discoverable` attaching an
 //! `EventHandlerMeta` whose thunk subscribes the handler to the bus at bootstrap.
 
 use proc_macro::TokenStream;
@@ -10,12 +10,12 @@ use nestrs_codegen::{
     build_injectable_body, from_container_method, injected_method, InjectableBody,
 };
 
-pub(crate) fn event_handler(args: TokenStream, input: TokenStream) -> TokenStream {
+pub(crate) fn on_event(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = TokenStream2::from(args);
     if !args.is_empty() {
         return syn::Error::new_spanned(
             &args,
-            "#[event_handler] takes no arguments; the handled event is the `type Event` \
+            "#[on_event] takes no arguments; the handled event is the `type Event` \
              of the `EventHandler` impl",
         )
         .to_compile_error()
