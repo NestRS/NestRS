@@ -1,7 +1,7 @@
 //! Typed in-process event bus for nestrs — the `@nestjs/event-emitter` analog.
 //!
 //! An event is any `Clone + Send + 'static` type. A handler is a struct:
-//! `#[event_handler]` builds it from the container (its `#[inject]` fields) and
+//! `#[on_event]` builds it from the container (its `#[inject]` fields) and
 //! emits the single `impl Discoverable` attaching an [`EventHandlerMeta`] — so a
 //! handler is wired by listing it in `#[module(providers = [...])]`, exactly like
 //! a controller or cron job. Import [`EventModule`] to register the [`EventBus`]
@@ -14,7 +14,7 @@
 //! #[derive(Clone)]
 //! pub struct UserRegistered { pub email: String }
 //!
-//! #[event_handler]
+//! #[on_event]
 //! pub struct SendWelcomeEmail {
 //!     #[inject] mailer: std::sync::Arc<Mailer>,
 //! }
@@ -46,9 +46,9 @@ pub use handler::EventHandler;
 pub use meta::EventHandlerMeta;
 pub use module::EventModule;
 
-pub use nestrs_events_macros::event_handler;
+pub use nestrs_events_macros::on_event;
 
-// Re-exported so an `#[event_handler]` struct can write
+// Re-exported so an `#[on_event]` struct can write
 // `#[nestrs_events::async_trait]` on its `EventHandler` impl without a direct
 // `async_trait` dependency — and so the handler future is boxed `Send`, which the
 // bus requires.

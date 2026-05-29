@@ -5,7 +5,7 @@ use crate::container::ContainerBuilder;
 /// Anything a `#[module]` can pull in via `providers = [...]`.
 ///
 /// The macros that decorate a struct (`#[injectable]`, `#[interceptor]`, and
-/// future `#[cron_job]`/`#[event_handler]`/`#[mcp_tool]`/…) — together with
+/// future `#[cron_job]`/`#[on_event]`/`#[mcp]`/…) — together with
 /// the `#[routes]` macro on a controller's `impl` block — emit a single
 /// `impl Discoverable for Self` per type. The implementation either:
 ///

@@ -14,7 +14,7 @@ use crate::{EventBus, EventHandlerMeta};
 ///
 /// Registers the [`EventBus`] as a provider — inject `Arc<EventBus>` to
 /// [`emit`](EventBus::emit) — and, at application bootstrap, wires every
-/// discovered `#[event_handler]` into it. Wiring runs against the fully-assembled
+/// discovered `#[on_event]` into it. Wiring runs against the fully-assembled
 /// container, so a handler may inject any provider regardless of module import
 /// order, mirroring how the `Scheduler` transport reads its jobs.
 pub struct EventModule;

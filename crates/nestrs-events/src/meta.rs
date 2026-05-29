@@ -1,10 +1,10 @@
-//! Discovery metadata attached by `#[event_handler]`.
+//! Discovery metadata attached by `#[on_event]`.
 
 use nestrs_core::Container;
 
 use crate::EventBus;
 
-/// Discovery metadata attached by `#[event_handler]`. [`EventModule`](crate::EventModule)'s
+/// Discovery metadata attached by `#[on_event]`. [`EventModule`](crate::EventModule)'s
 /// bootstrap hook reads these via `DiscoveryService::meta::<EventHandlerMeta>()` from
 /// the assembled container and runs each [`wire`](EventHandlerMeta::wire) to build the
 /// handler and subscribe it to the bus. Fields are `pub` only so generated code can

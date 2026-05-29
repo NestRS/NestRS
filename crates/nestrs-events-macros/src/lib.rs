@@ -1,11 +1,11 @@
-//! The `#[event_handler]` decorator, re-exported by `nestrs-events`. The generated
+//! The `#[on_event]` decorator, re-exported by `nestrs-events`. The generated
 //! code uses absolute paths (`::nestrs_events::*`, `::nestrs_core::*`, `::std::*`),
 //! so this crate does not depend on them — they resolve at the call site.
 //! Token-building helpers are shared with the other decorators via `nestrs-codegen`.
 
 use proc_macro::TokenStream;
 
-mod event_handler;
+mod on_event;
 
 /// Mark a struct as an event handler, discovered like a controller or cron job.
 ///
@@ -18,7 +18,7 @@ mod event_handler;
 /// declares the `Event` type it handles.
 ///
 /// ```ignore
-/// #[event_handler]
+/// #[on_event]
 /// pub struct SendWelcomeEmail {
 ///     #[inject] mailer: std::sync::Arc<Mailer>,
 /// }
@@ -32,6 +32,6 @@ mod event_handler;
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn event_handler(args: TokenStream, input: TokenStream) -> TokenStream {
-    event_handler::event_handler(args, input)
+pub fn on_event(args: TokenStream, input: TokenStream) -> TokenStream {
+    on_event::on_event(args, input)
 }

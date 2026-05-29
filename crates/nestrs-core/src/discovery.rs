@@ -12,7 +12,7 @@ use crate::container::Container;
 /// [`crate::ContainerBuilder::attach_meta`] (host-bound) or
 /// [`crate::ContainerBuilder::provide_meta`] (free-standing). The macros that
 /// describe a provider — `#[routes]` for an HTTP controller, future
-/// `#[cron_job]`, `#[mcp_tool]`, … — emit the `attach_meta` call so the
+/// `#[cron_job]`, `#[mcp]`, … — emit the `attach_meta` call so the
 /// developer never touches it by hand.
 pub struct DiscoveryService<'a> {
     container: &'a Container,
