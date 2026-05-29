@@ -609,6 +609,7 @@ path-param *types* (emitted as `string`), security schemes, and a committed
   | service | `service.rs` | `*.service.ts` |
   | HTTP controller | `controller.rs` | `*.controller.ts` |
   | GraphQL resolver | `resolver.rs` | `*.resolver.ts` |
+  | MCP tool (`#[mcp]`) | `tool.rs` | — (no Nest analog) |
   | SeaORM entity | `entity.rs` | `*.entity.ts` |
   | DTOs | `dto.rs` | `*.dto.ts` |
   | guard / strategy | `guard.rs` / `strategy.rs` | `*.guard.ts` / `*.strategy.ts` |

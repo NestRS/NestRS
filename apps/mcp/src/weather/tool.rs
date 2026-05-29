@@ -11,13 +11,13 @@ use crate::weather::service::WeatherProvider;
 
 #[mcp(path = "/mcp")]
 #[derive(Clone)]
-pub struct WeatherController {
+pub struct WeatherTool {
     #[inject]
     weather: Arc<dyn WeatherProvider>,
 }
 
 #[tool_router]
-impl WeatherController {
+impl WeatherTool {
     #[tool(description = "Return the current weather at the given GPS coordinates (Open-Meteo).")]
     async fn current_weather(
         &self,
@@ -51,7 +51,7 @@ fn internal(e: impl std::fmt::Display) -> McpError {
 }
 
 #[tool_handler]
-impl ServerHandler for WeatherController {}
+impl ServerHandler for WeatherTool {}
 
 #[cfg(test)]
 mod tests {
@@ -60,7 +60,7 @@ mod tests {
 
     use nestrs_core::Discoverable;
 
-    use super::WeatherController;
+    use super::WeatherTool;
     use crate::weather::service::WeatherProvider;
 
     #[test]
@@ -68,9 +68,9 @@ mod tests {
         // An MCP tool is built per session, so `dependencies` is empty; `injected`
         // reports the `Arc<dyn WeatherProvider>` it pulls — keyed exactly as the
         // `provide_dyn` binding — so the access-graph check governs it.
-        assert!(WeatherController::dependencies().is_empty());
+        assert!(WeatherTool::dependencies().is_empty());
         assert!(
-            WeatherController::injected().contains(&TypeId::of::<Arc<dyn WeatherProvider>>()),
+            WeatherTool::injected().contains(&TypeId::of::<Arc<dyn WeatherProvider>>()),
             "the MCP tool's injected dyn WeatherProvider is recorded for the access graph",
         );
     }

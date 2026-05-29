@@ -1,12 +1,14 @@
-use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use nestrs_core::injectable;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::weather::config::WeatherConfig;
 use crate::weather::dto::WeatherReport;
+
+const BASE_URL: &str = "https://api.open-meteo.com/v1/forecast";
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Error)]
 pub enum WeatherError {
@@ -23,31 +25,26 @@ pub(crate) trait WeatherProvider: Send + Sync + 'static {
 }
 
 #[injectable]
+#[derive(Default)]
 pub(in crate::weather) struct OpenMeteoClient {
-    #[inject]
-    http: Arc<reqwest::Client>,
-    #[inject]
-    config: Arc<WeatherConfig>,
+    http: reqwest::Client,
 }
 
 #[async_trait]
 impl WeatherProvider for OpenMeteoClient {
     async fn current(&self, latitude: f64, longitude: f64) -> Result<WeatherReport, WeatherError> {
-        let url = format!(
-            "{}?latitude={latitude}&longitude={longitude}&current_weather=true",
-            self.config.base_url
-        );
+        let url =
+            format!("{BASE_URL}?latitude={latitude}&longitude={longitude}&current_weather=true");
         let payload: OpenMeteoResponse = self
             .http
             .get(&url)
+            .timeout(REQUEST_TIMEOUT)
             .send()
             .await?
             .error_for_status()?
             .json()
             .await?;
-        let current = payload
-            .current_weather
-            .ok_or(WeatherError::MissingPayload)?;
+        let current = payload.current_weather.ok_or(WeatherError::MissingPayload)?;
 
         Ok(WeatherReport {
             temperature_c: current.temperature,
