@@ -1,16 +1,3 @@
-//! End-to-end against a **real, throwaway Postgres database**.
-//!
-//! `AppModule`'s `DatabaseModule` connects at boot, so this can't be faked. Each
-//! test spins up a fresh [`EphemeralDatabase`] (migrated with the app's own
-//! `Migrator`) and seeds its connection — the module's connect-factory is
-//! short-circuited because a seed of the same type wins — then drops the database
-//! when the test ends. From there the in-process harness drives the live
-//! HTTP/OpenAPI surfaces: routing, the bearer-JWT auth guard (verify-only — `api`
-//! is a resource server, the `auth` app issues the tokens), and a real persisted
-//! round-trip through SeaORM.
-//!
-//! Requires a reachable Postgres at `DATABASE_URL` (the devcontainer provides one).
-
 use api::AppModule;
 use identity::{Claims, Role};
 use nestrs_auth::{JwtOptions, JwtService};
@@ -21,14 +8,8 @@ use uuid::Uuid;
 
 const ORG_ID: &str = "018f0000-0000-7000-8000-000000000000";
 
-/// **Test only.** The dev Ed25519 *private* key, matched with
-/// `identity::DEV_PUBLIC_KEY_PEM` that `api` verifies against. The `api` *binary*
-/// never holds this — only the `auth` app signs — but the e2e must mint tokens to
-/// drive the resource server, so it signs them here directly (no running `auth`).
 const DEV_PRIVATE_KEY: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIEYTRN4vmCuIfaUslO5G9pKyxkDJn3q3t9WDHo2FCfw3\n-----END PRIVATE KEY-----\n";
 
-/// A fresh database + booted app per test, so the tests are fully isolated and
-/// the database is reclaimed (RAII) when the returned guard drops at scope end.
 async fn boot() -> (EphemeralDatabase, TestApp) {
     let db = EphemeralDatabase::create::<db::Migrator>()
         .await
@@ -43,14 +24,10 @@ async fn boot() -> (EphemeralDatabase, TestApp) {
     (db, app)
 }
 
-/// Mint an admin bearer token for the default org.
 async fn login(app: &TestApp) -> String {
     token_for(app, ORG_ID, "admin").await
 }
 
-/// Mint a bearer token for a specific org and role — signed with the dev private
-/// key exactly as the `auth` app would, so `api` (verify-only, public key) accepts
-/// it. Async only to keep call sites unchanged; it does no I/O.
 async fn token_for(_app: &TestApp, org_id: &str, role: &str) -> String {
     let jwt = JwtService::new(JwtOptions::eddsa(
         DEV_PRIVATE_KEY,
@@ -69,8 +46,6 @@ async fn token_for(_app: &TestApp, org_id: &str, role: &str) -> String {
     .expect("sign the test token")
 }
 
-/// Create an org (creating one needs only a valid bearer, not a matching org) and
-/// return its generated id — used as the `org_id` a later token authorizes within.
 async fn create_org(app: &TestApp, bearer: &str, name: &str) -> String {
     let resp = app
         .http()
@@ -89,7 +64,6 @@ async fn create_org(app: &TestApp, bearer: &str, name: &str) -> String {
         .to_owned()
 }
 
-/// The `name`s in a `GET /users` listing.
 async fn user_names(app: &TestApp, bearer: &str) -> Vec<String> {
     let listed = app
         .http()
@@ -139,14 +113,12 @@ async fn openapi_document_describes_the_routes() {
 async fn protected_route_rejects_a_missing_or_bogus_bearer_token() {
     let (_db, app) = boot().await;
 
-    // No Authorization header: the AuthGuard short-circuits with 401.
     app.http()
         .get("/orgs")
         .send()
         .await
         .assert_status(StatusCode::UNAUTHORIZED);
 
-    // A malformed token does not verify: also 401.
     app.http()
         .get("/orgs")
         .header(header::AUTHORIZATION, "Bearer not-a-real-jwt")
@@ -198,14 +170,12 @@ async fn create_org_persists_and_is_listed_with_a_bearer_token() {
 async fn users_are_scoped_to_their_org_and_bound_by_id() {
     let (_db, app) = boot().await;
 
-    // Two orgs, created with a bootstrap token, then a token scoped to each.
     let bootstrap = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
     let org_a = create_org(&app, &bootstrap, "Acme").await;
     let org_b = create_org(&app, &bootstrap, "Globex").await;
     let token_a = format!("Bearer {}", token_for(&app, &org_a, "admin").await);
     let token_b = format!("Bearer {}", token_for(&app, &org_b, "admin").await);
 
-    // Create a user in org A (its org_id comes from the caller's token).
     let created = app
         .http()
         .post("/users")
@@ -223,16 +193,11 @@ async fn users_are_scoped_to_their_org_and_bound_by_id() {
         .string()
         .to_owned();
 
-    // Org B cannot see org A's users — the `Repo` read is scoped to the caller's
-    // org with no filter written by hand.
     assert!(
         user_names(&app, &token_b).await.is_empty(),
         "org B sees none of org A's users",
     );
 
-    // `Bind` enforces the same boundary by id: a real but out-of-scope row is 403
-    // (its existence is intentionally not hidden), a missing v7 id is 404, and a
-    // non-v7 path id is rejected as 400 before the handler runs.
     app.http()
         .get(format!("/users/{user_a}"))
         .header(header::AUTHORIZATION, &token_b)
@@ -252,7 +217,6 @@ async fn users_are_scoped_to_their_org_and_bound_by_id() {
         .await
         .assert_status(StatusCode::BAD_REQUEST);
 
-    // Org A sees its own user, by list and by id (via `Bind`).
     assert_eq!(user_names(&app, &token_a).await, vec!["Ada".to_string()]);
     let got = app
         .http()
@@ -273,7 +237,6 @@ async fn a_plain_user_listing_masks_the_email() {
     let bootstrap = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
     let org = create_org(&app, &bootstrap, "Initech").await;
 
-    // An admin creates the user (admin may Manage → Create).
     app.http()
         .post("/users")
         .header(
@@ -285,8 +248,6 @@ async fn a_plain_user_listing_masks_the_email() {
         .await
         .assert_status_is_ok();
 
-    // A plain user in the same org may read id+name but not email — the
-    // `Authorize` shaper still masks the response after our ambient-ability change.
     let user = format!("Bearer {}", token_for(&app, &org, "user").await);
     let listed = app
         .http()
@@ -317,7 +278,6 @@ async fn a_failed_mutation_persists_nothing() {
     let org = create_org(&app, &bootstrap, "Hooli").await;
     let admin = format!("Bearer {}", token_for(&app, &org, "admin").await);
 
-    // First create succeeds.
     app.http()
         .post("/users")
         .header(header::AUTHORIZATION, &admin)
@@ -326,8 +286,6 @@ async fn a_failed_mutation_persists_nothing() {
         .await
         .assert_status_is_ok();
 
-    // A second create reuses the unique email, so the insert fails — and the
-    // transaction the DbContext interceptor opened for the request rolls back.
     app.http()
         .post("/users")
         .header(header::AUTHORIZATION, &admin)
@@ -336,7 +294,6 @@ async fn a_failed_mutation_persists_nothing() {
         .await
         .assert_status(StatusCode::INTERNAL_SERVER_ERROR);
 
-    // Exactly the first user remains; the rejected mutation left nothing behind.
     assert_eq!(user_names(&app, &admin).await, vec!["Ada".to_string()]);
 }
 
@@ -347,7 +304,6 @@ async fn orgs_admin_sees_all_but_a_plain_user_is_scoped_to_its_own() {
     let org_x = create_org(&app, &admin, "OrgX").await;
     let org_y = create_org(&app, &admin, "OrgY").await;
 
-    // The admin is the control plane: every org is visible.
     let admin_list = app
         .http()
         .get("/orgs")
@@ -368,8 +324,6 @@ async fn orgs_admin_sees_all_but_a_plain_user_is_scoped_to_its_own() {
         "the admin sees every org: {admin_names:?}",
     );
 
-    // A plain user scoped to org X sees only org X — the same ambient `Repo`
-    // scoping as users, now on the org resource.
     let user_x = format!("Bearer {}", token_for(&app, &org_x, "user").await);
     let user_list = app
         .http()
@@ -388,7 +342,6 @@ async fn orgs_admin_sees_all_but_a_plain_user_is_scoped_to_its_own() {
         .collect();
     assert_eq!(user_names, vec!["OrgX".to_string()]);
 
-    // `Bind` enforces it by id: org Y is forbidden, org X is served.
     app.http()
         .get(format!("/orgs/{org_y}"))
         .header(header::AUTHORIZATION, &user_x)
@@ -419,7 +372,6 @@ async fn graphql_requires_a_jwt_and_scopes_to_the_callers_org() {
         token_for(&app, &create_org(&app, &admin, "GqlGlobex").await, "admin").await
     );
 
-    // A user in org A, created via REST.
     let created = app
         .http()
         .post("/users")
@@ -439,8 +391,6 @@ async fn graphql_requires_a_jwt_and_scopes_to_the_callers_org() {
 
     let query = json!({ "query": "{ users { name } }" });
 
-    // Anonymous GraphQL is refused — no token, no ambient ability, so `authorize`
-    // forbids the resolver (errors present, no users data).
     let anon = app.http().post("/graphql").body_json(&query).send().await;
     anon.assert_status_is_ok();
     assert!(
@@ -453,8 +403,6 @@ async fn graphql_requires_a_jwt_and_scopes_to_the_callers_org() {
         "an anonymous GraphQL query is rejected",
     );
 
-    // Org B (authenticated) sees none of org A's users — `Repo` scopes the
-    // resolver's read to the caller's org, exactly like the REST list.
     let b = app
         .http()
         .post("/graphql")
@@ -479,7 +427,6 @@ async fn graphql_requires_a_jwt_and_scopes_to_the_callers_org() {
         "org B sees no users in GraphQL: {b_names:?}"
     );
 
-    // Org A sees its own user.
     let a = app
         .http()
         .post("/graphql")
@@ -501,8 +448,6 @@ async fn graphql_requires_a_jwt_and_scopes_to_the_callers_org() {
         .collect();
     assert_eq!(a_names, vec!["Gql Ada".to_string()]);
 
-    // `bind` by id (the `user(id)` resolver): org A loads its user; org B is
-    // forbidden the same row (existence is not hidden — a FORBIDDEN error).
     let by_id = json!({ "query": format!("{{ user(id: \"{user_a}\") {{ name }} }}") });
     let a_one = app
         .http()
@@ -555,7 +500,6 @@ async fn graphql_namesakes_field_stays_within_the_callers_org() {
     let token_a = format!("Bearer {}", token_for(&app, &org_a, "admin").await);
     let token_b = format!("Bearer {}", token_for(&app, &org_b, "admin").await);
 
-    // The same name in both orgs, plus a second in org A.
     for (tok, email) in [
         (&token_a, "twina@x.test"),
         (&token_b, "twinb@x.test"),
@@ -570,8 +514,6 @@ async fn graphql_namesakes_field_stays_within_the_callers_org() {
             .assert_status_is_ok();
     }
 
-    // A dataloader-backed field relation must not cross orgs: org A's namesakes are
-    // its own same-name users, never org B's.
     let resp = app
         .http()
         .post("/graphql")
@@ -610,11 +552,8 @@ async fn crud_generated_update_and_delete_round_trip() {
     let (_db, app) = boot().await;
     let admin = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
 
-    // `#[crud]` generated POST /orgs (create) ...
     let id = create_org(&app, &admin, "Before").await;
 
-    // ... PATCH /orgs/:id (update) — the generated handler binds the row, applies
-    // `UpdateOrgInput`, and commits in the request transaction.
     let patched = app
         .http()
         .patch(format!("/orgs/{id}"))
@@ -628,7 +567,6 @@ async fn crud_generated_update_and_delete_round_trip() {
         "After"
     );
 
-    // GET /orgs/:id reflects the update.
     let got = app
         .http()
         .get(format!("/orgs/{id}"))
@@ -641,7 +579,6 @@ async fn crud_generated_update_and_delete_round_trip() {
         "After"
     );
 
-    // DELETE /orgs/:id (generated) returns 204 ...
     app.http()
         .delete(format!("/orgs/{id}"))
         .header(header::AUTHORIZATION, &admin)
@@ -649,7 +586,6 @@ async fn crud_generated_update_and_delete_round_trip() {
         .await
         .assert_status(StatusCode::NO_CONTENT);
 
-    // ... and the row is gone (Bind finds nothing → 404).
     app.http()
         .get(format!("/orgs/{id}"))
         .header(header::AUTHORIZATION, &admin)
@@ -663,15 +599,11 @@ async fn crud_cursor_pagination_walks_the_collection_in_order() {
     let (_db, app) = boot().await;
     let admin = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
 
-    // Five orgs, created in order — UUID-v7 ids sort chronologically, so the
-    // keyset pages come back in creation order.
     let mut created = Vec::new();
     for i in 0..5 {
         created.push(create_org(&app, &admin, &format!("Page{i}")).await);
     }
 
-    // Walk in pages of 2, following the cursor (each page's last id — exactly what
-    // the `x-next-cursor` header carries).
     let mut seen: Vec<String> = Vec::new();
     let mut after: Option<String> = None;
     let mut first_page = true;
@@ -687,7 +619,6 @@ async fn crud_cursor_pagination_walks_the_collection_in_order() {
             .send()
             .await;
         resp.assert_status_is_ok();
-        // The first page has more behind it, so it advertises the next cursor.
         if first_page {
             resp.assert_header_exist("x-next-cursor");
             first_page = false;

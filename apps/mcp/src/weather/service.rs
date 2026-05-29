@@ -44,7 +44,9 @@ impl WeatherProvider for OpenMeteoClient {
             .error_for_status()?
             .json()
             .await?;
-        let current = payload.current_weather.ok_or(WeatherError::MissingPayload)?;
+        let current = payload
+            .current_weather
+            .ok_or(WeatherError::MissingPayload)?;
 
         Ok(WeatherReport {
             temperature_c: current.temperature,

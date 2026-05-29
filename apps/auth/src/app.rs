@@ -7,17 +7,10 @@ use nestrs_throttler::{Throttle, ThrottlerModule};
 
 use crate::oauth::OAuthModule;
 
-/// **Dev only.** The Ed25519 **private** key that signs dev tokens — matched with
-/// `identity::DEV_PUBLIC_KEY_PEM`, which `api` verifies against. It lives *only*
-/// here: a resource server never holds it, so it can never mint tokens. Production
-/// supplies a real private key via `JWT_PRIVATE_KEY` and never reads this.
 const DEV_PRIVATE_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIEYTRN4vmCuIfaUslO5G9pKyxkDJn3q3t9WDHo2FCfw3\n-----END PRIVATE KEY-----\n";
 
 #[module(
     imports = [
-        // EdDSA: this app holds the private (signing) key; `api` holds only the
-        // public one. Asymmetric is the whole point — a resource-server compromise
-        // cannot forge tokens.
         AuthModule::for_root(JwtOptions::eddsa(
             env_var("JWT_PRIVATE_KEY").unwrap_or_else(|| DEV_PRIVATE_KEY_PEM.into()),
             env_var("JWT_PUBLIC_KEY").unwrap_or_else(|| identity::DEV_PUBLIC_KEY_PEM.into()),

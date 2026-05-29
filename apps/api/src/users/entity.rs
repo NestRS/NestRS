@@ -5,9 +5,6 @@ use serde::{Deserialize, Serialize};
 #[expose(name = "User", complex)]
 #[sea_orm::model]
 #[derive(Clone, Debug, DeriveEntityModel)]
-// `Serialize`/`Deserialize`/`PartialEq` go on the plain `Model` only: the
-// generated `ModelEx` holds the `HasOne`/`HasMany` relation fields, whose serde
-// impls are mutually recursive across the two entities and cannot be derived.
 #[sea_orm(
     table_name = "user",
     model_attrs(derive(PartialEq, Serialize, Deserialize))

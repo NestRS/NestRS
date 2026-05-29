@@ -1,7 +1,3 @@
-//! End-to-end for the authorization server: the OAuth2 `POST /token` endpoint
-//! issues a Bearer token, and — the point of the split — a **verify-only** service
-//! holding only the public key (what `api` runs) validates it. Driven in-process.
-
 use auth::AppModule;
 use identity::{Claims, Role, DEV_PUBLIC_KEY_PEM};
 use nestrs_auth::{JwtOptions, JwtService};
@@ -19,8 +15,6 @@ async fn boot() -> TestApp {
         .expect("the auth app boots")
 }
 
-/// The resource-server side: a `JwtService` built with ONLY the public key, exactly
-/// as `api` configures it. It must verify what `auth` signed with the private key.
 fn resource_server_verifier() -> JwtService {
     JwtService::new(JwtOptions::eddsa_verify(DEV_PUBLIC_KEY_PEM))
         .expect("the dev public key parses")
@@ -47,7 +41,6 @@ async fn token_endpoint_issues_a_token_the_public_key_verifies() {
     assert!(obj.get("expires_in").i64() > 0);
     let token = obj.get("access_token").string().to_owned();
 
-    // Verify with the public key alone — the asymmetric trust `api` relies on.
     let claims: Claims = resource_server_verifier()
         .verify(&token)
         .expect("the public key verifies the privately-signed token");

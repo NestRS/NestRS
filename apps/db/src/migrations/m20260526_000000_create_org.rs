@@ -6,9 +6,6 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // Created before `user` so the `user.org_id` foreign key resolves.
-        // Mirrors `apps/api/src/orgs/entity.rs`: a client-generated UUID v7
-        // primary key (no auto-increment) and a unique name.
         manager
             .create_table(
                 Table::create()

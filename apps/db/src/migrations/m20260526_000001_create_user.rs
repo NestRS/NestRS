@@ -6,10 +6,6 @@ pub struct Migration;
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        // Mirrors `apps/api/src/users/entity.rs`: a client-generated UUID v7
-        // primary key (no auto-increment), a non-null org scope, and a unique email.
-        // `org_id` carries a foreign key to `org` (created by the prior migration) —
-        // the DB-level mirror of the SeaORM `belongs_to`/`has_many` relation.
         manager
             .create_table(
                 Table::create()
@@ -48,8 +44,6 @@ enum User {
     Email,
 }
 
-// Referenced only by the `org_id` foreign key; the table itself is owned by the
-// `create_org` migration.
 #[derive(DeriveIden)]
 enum Org {
     Table,

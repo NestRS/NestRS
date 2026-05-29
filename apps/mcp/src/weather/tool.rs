@@ -65,9 +65,6 @@ mod tests {
 
     #[test]
     fn mcp_tool_declares_its_injected_trait_dependency_for_the_access_graph() {
-        // An MCP tool is built per session, so `dependencies` is empty; `injected`
-        // reports the `Arc<dyn WeatherProvider>` it pulls — keyed exactly as the
-        // `provide_dyn` binding — so the access-graph check governs it.
         assert!(WeatherTool::dependencies().is_empty());
         assert!(
             WeatherTool::injected().contains(&TypeId::of::<Arc<dyn WeatherProvider>>()),

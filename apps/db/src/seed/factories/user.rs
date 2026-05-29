@@ -1,6 +1,3 @@
-//! User factory: demo users spread across the orgs. `fake` supplies the names;
-//! emails are derived from a per-org slug so `ON CONFLICT (email) DO NOTHING`
-//! keeps re-runs idempotent even though the generated names are random.
 use anyhow::Result;
 use fake::faker::name::en::Name;
 use fake::Fake;
@@ -10,7 +7,6 @@ use uuid::Uuid;
 
 use crate::seed::factories::org;
 
-// Per org: its id, the email slug, and how many users to generate.
 const DEMO: [(Uuid, &str, usize); 2] = [(org::ACME, "acme", 3), (org::GLOBEX, "globex", 2)];
 
 #[derive(DeriveIden)]

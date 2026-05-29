@@ -19,9 +19,6 @@ use crate::users::UsersModule;
             url: env_var("DATABASE_URL").unwrap_or_default(),
             ..Default::default()
         }),
-        // Resource server: verify-only. `api` holds **only** the public key, so it
-        // validates tokens the `auth` app minted but can never sign one. (No
-        // OAuth2 / token-issuing modules here — that all lives in `apps/auth`.)
         AuthModule::for_root(JwtOptions::eddsa_verify(
             env_var("JWT_PUBLIC_KEY").unwrap_or_else(|| identity::DEV_PUBLIC_KEY_PEM.into()),
         )),
