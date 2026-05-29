@@ -1,12 +1,12 @@
-//! The app's OAuth2 authentication strategy (a GitHub-style provider), and the
-//! guard that drives it. One [`Strategy`] bound to both `/auth/oauth` and
-//! `/auth/oauth/callback`, exactly like Passport's `AuthGuard('github')`: with no
-//! `code` it challenges the browser with a redirect to the provider; on the
-//! callback it trades the `code` for an access token, reads the profile, and
-//! produces the [`AuthUser`].
+//! The OAuth2 authentication strategy (a GitHub-style provider) and its guard.
+//! One [`Strategy`] bound to both `/authorize` and `/callback`, like Passport's
+//! `AuthGuard('github')`: with no `code` it challenges the browser with a redirect
+//! to the provider; on the callback it trades the `code` for an access token,
+//! reads the profile, and produces the [`Caller`] the callback handler issues a
+//! token for.
 //!
 //! The CSRF state + PKCE verifier ride between the two legs in the `oauth_tx`
-//! cookie, a short JWT signed by the app's `JwtService` (see [`nestrs_auth`]).
+//! cookie, a short JWT signed by this app's `JwtService`.
 
 use std::sync::Arc;
 
@@ -18,7 +18,16 @@ use poem::{Request, Response};
 use serde::Deserialize;
 use uuid::Uuid;
 
-use crate::authn::principal::{AuthUser, Role};
+use identity::Role;
+
+/// The freshly authenticated caller the OAuth flow produces, which the `/callback`
+/// handler turns into a token. Local to this app — it is not the wire contract
+/// (that is `identity::Claims`).
+#[derive(Debug, Clone)]
+pub struct Caller {
+    pub org_id: Uuid,
+    pub roles: Vec<Role>,
+}
 
 /// The cookie carrying the signed OAuth transaction across the redirect.
 const TRANSACTION_COOKIE: &str = "oauth_tx";
@@ -40,9 +49,9 @@ pub struct OAuthStrategy {
 
 #[async_trait]
 impl Strategy for OAuthStrategy {
-    type Principal = AuthUser;
+    type Principal = Caller;
 
-    async fn authenticate(&self, req: &mut Request) -> Result<Outcome<AuthUser>, AuthError> {
+    async fn authenticate(&self, req: &mut Request) -> Result<Outcome<Caller>, AuthError> {
         let query: CallbackQuery = req.params().unwrap_or_default();
 
         let Some(code) = query.code else {
@@ -74,19 +83,17 @@ impl Strategy for OAuthStrategy {
             .await?;
 
         // The profile fetch proves the access token; a real app reads the caller's
-        // identity and org from it. The demo issues a token for a fixed org so the
-        // example stays self-contained.
+        // identity and org from it. The demo issues for a fixed org so the example
+        // stays self-contained.
         let _profile: serde_json::Value = self.oauth.userinfo(&access_token).await?;
-        Ok(Outcome::Authenticated(AuthUser {
+        Ok(Outcome::Authenticated(Caller {
             org_id: Uuid::from_u128(0x018f_0000_0000_7000_8000_0000_0000_0001),
             roles: vec![Role::User],
         }))
     }
 }
 
-/// Read the `oauth_tx` cookie value out of the request's `Cookie` header. The
-/// value is a JWT (base64url + `.`), all cookie-safe characters, so a plain split
-/// is enough.
+/// Read the `oauth_tx` cookie value out of the request's `Cookie` header.
 fn transaction_cookie(req: &Request) -> Option<String> {
     let header = req.headers().get(header::COOKIE)?.to_str().ok()?;
     header.split(';').find_map(|pair| {
@@ -97,5 +104,5 @@ fn transaction_cookie(req: &Request) -> Option<String> {
     })
 }
 
-/// The app's OAuth guard: [`nestrs_auth::AuthGuard`] bound to [`OAuthStrategy`].
+/// The OAuth guard: [`nestrs_auth::AuthGuard`] bound to [`OAuthStrategy`].
 pub type OAuthGuard = nestrs_auth::AuthGuard<OAuthStrategy>;

@@ -9,10 +9,16 @@
 //! surface, so a macro would generate nothing. One is warranted only if a real
 //! boilerplate pattern emerges.
 
+use std::marker::PhantomData;
+use std::sync::Arc;
+
 use async_trait::async_trait;
+use nestrs_core::injectable;
 use poem::{http::header, Request, Response};
+use serde::de::DeserializeOwned;
 
 use crate::error::AuthError;
+use crate::jwt::JwtService;
 
 /// What a [`Strategy`] decided about a request.
 ///
@@ -54,4 +60,37 @@ pub fn bearer_token(req: &Request) -> Option<&str> {
     let value = req.headers().get(header::AUTHORIZATION)?.to_str().ok()?;
     let token = value.strip_prefix("Bearer ")?.trim();
     (!token.is_empty()).then_some(token)
+}
+
+/// The ready **bearer-JWT** strategy — the framework's `passport-jwt`. Generic over
+/// the claims type `C` it verifies into and hands on as the principal: pull the
+/// `Authorization: Bearer` token, verify it with the injected [`JwtService`], and
+/// authenticate as the decoded `C`. Because it is fully generic (no business
+/// logic), an app binds it by *choosing `C`* and aliasing the guard — there is no
+/// hand-written strategy to maintain:
+///
+/// ```ignore
+/// pub type AuthGuard = nestrs_auth::AuthGuard<nestrs_auth::JwtStrategy<MyClaims>>;
+/// ```
+///
+/// When an app genuinely needs custom authentication (a revocation check, mapping
+/// claims to a richer principal, a non-JWT scheme), it writes its **own**
+/// [`Strategy`] instead — this type only covers the standard case, and the trait is
+/// the escape hatch.
+#[injectable]
+pub struct JwtStrategy<C: Send + Sync + 'static> {
+    #[inject]
+    jwt: Arc<JwtService>,
+    _claims: PhantomData<C>,
+}
+
+#[async_trait]
+impl<C: DeserializeOwned + Clone + Send + Sync + 'static> Strategy for JwtStrategy<C> {
+    type Principal = C;
+
+    async fn authenticate(&self, req: &mut Request) -> Result<Outcome<C>, AuthError> {
+        let token = bearer_token(req).ok_or(AuthError::MissingCredentials)?;
+        let claims: C = self.jwt.verify(token)?;
+        Ok(Outcome::Authenticated(claims))
+    }
 }

@@ -1,19 +1,11 @@
+//! `api` is a resource server: it only **verifies** bearer tokens (the `auth` app
+//! issues them). So this module wires just the framework's JWT strategy over the
+//! app's `Claims` and the guard that runs it — no token-issuing controller/service.
+
 use nestrs_core::module;
-use nestrs_throttler::ThrottlerGuard;
 
-use crate::authn::controller::AuthController;
 use crate::authn::guard::AuthGuard;
-use crate::authn::oauth::{OAuthGuard, OAuthStrategy};
-use crate::authn::service::AuthService;
-use crate::authn::strategy::JwtStrategy;
+use crate::authn::strategy::AppJwtStrategy;
 
-#[module(providers = [
-    JwtStrategy,
-    AuthGuard,
-    OAuthStrategy,
-    OAuthGuard,
-    ThrottlerGuard,
-    AuthService,
-    AuthController,
-])]
+#[module(providers = [AppJwtStrategy, AuthGuard])]
 pub struct AuthnModule;

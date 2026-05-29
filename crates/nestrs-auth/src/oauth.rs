@@ -196,7 +196,7 @@ mod tests {
     }
 
     fn jwt() -> JwtService {
-        JwtService::new(JwtOptions::new("test-secret"))
+        JwtService::new(JwtOptions::new("test-secret")).expect("HMAC JwtService is infallible")
     }
 
     #[test]

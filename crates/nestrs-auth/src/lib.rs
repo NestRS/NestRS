@@ -24,10 +24,10 @@ mod strategy;
 
 pub use error::AuthError;
 pub use guard::AuthGuard;
-pub use jwt::{JwtOptions, JwtService};
+pub use jwt::{JwtKey, JwtOptions, JwtService};
 pub use module::{AuthModule, AuthSetup, OAuth2Module, OAuth2Setup};
 pub use oauth::{Authorization, OAuth2Client, OAuth2Config};
-pub use strategy::{bearer_token, Outcome, Strategy};
+pub use strategy::{bearer_token, JwtStrategy, Outcome, Strategy};
 
 /// Re-exported so apps configure [`JwtOptions`] without taking a direct
 /// `jsonwebtoken` dependency.
