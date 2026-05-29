@@ -120,7 +120,12 @@ syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
 
-# Internal crates
+# Business-shared crates (not framework — no `nestrs-` prefix). Domain contracts
+# several apps must agree on, e.g. the JWT claims the `auth` app signs and the
+# `api` app verifies.
+identity = { path = "crates/identity" }
+
+# Internal crates (framework)
 nestrs-core = { path = "crates/nestrs-core" }
 nestrs-auth = { path = "crates/nestrs-auth" }
 nestrs-throttler = { path = "crates/nestrs-throttler" }

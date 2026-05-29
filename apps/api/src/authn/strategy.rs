@@ -1,32 +1,10 @@
-//! The app's bearer-token authentication strategy: verify the `Authorization:
-//! Bearer <jwt>` and turn its [`Claims`] into the [`AuthUser`] the rest of the
-//! request reads.
+//! This app's authentication strategy. `api` is a resource server, so it reuses
+//! the framework's bearer-JWT strategy ([`JwtStrategy<C>`](nestrs_auth::JwtStrategy))
+//! over the shared [`Claims`] contract — there is no hand-written strategy. A
+//! custom scheme would implement `nestrs_auth::Strategy` here instead.
 
-use std::sync::Arc;
+use identity::Claims;
+use nestrs_auth::JwtStrategy;
 
-use nestrs_auth::{bearer_token, AuthError, JwtService, Outcome, Strategy};
-use nestrs_core::injectable;
-use nestrs_http::async_trait;
-use poem::Request;
-
-use crate::authn::principal::{AuthUser, Claims};
-
-#[injectable]
-pub struct JwtStrategy {
-    #[inject]
-    jwt: Arc<JwtService>,
-}
-
-#[async_trait]
-impl Strategy for JwtStrategy {
-    type Principal = AuthUser;
-
-    async fn authenticate(&self, req: &mut Request) -> Result<Outcome<AuthUser>, AuthError> {
-        let token = bearer_token(req).ok_or(AuthError::MissingCredentials)?;
-        let claims: Claims = self.jwt.verify(token)?;
-        Ok(Outcome::Authenticated(AuthUser {
-            org_id: claims.org_id,
-            roles: claims.roles,
-        }))
-    }
-}
+/// Verifies the `Bearer` JWT into the shared [`Claims`] (which *are* the caller).
+pub type AppJwtStrategy = JwtStrategy<Claims>;

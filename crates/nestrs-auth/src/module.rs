@@ -39,7 +39,7 @@ impl DynamicModule for AuthSetup {
         let options = self.options.clone();
         builder.provide_factory::<JwtService, _, _>(move |_| {
             let options = options.clone();
-            async move { Ok(JwtService::new(options)) }
+            async move { JwtService::new(options).map_err(anyhow::Error::new) }
         })
     }
 }

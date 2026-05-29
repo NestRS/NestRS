@@ -7,6 +7,7 @@ publish = false
 [dependencies]
 nestrs-core.workspace = true
 nestrs-auth.workspace = true
+nestrs-config.workspace = true
 nestrs-authz.workspace = true
 nestrs-authz-http.workspace = true
 nestrs-authz-graphql.workspace = true
@@ -19,7 +20,7 @@ nestrs-orm.workspace = true
 nestrs-resource.workspace = true
 nestrs-server-timing.workspace = true
 nestrs-telemetry = { workspace = true, features = ["http"] }
-nestrs-throttler.workspace = true
+identity.workspace = true
 poem.workspace = true
 tokio.workspace = true
 tracing.workspace = true

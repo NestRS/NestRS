@@ -174,10 +174,12 @@ dependencies = [
  "anyhow",
  "async-graphql",
  "db",
+ "identity",
  "nestrs-auth",
  "nestrs-authz",
  "nestrs-authz-graphql",
  "nestrs-authz-http",
+ "nestrs-config",
  "nestrs-core",
  "nestrs-graphql",
  "nestrs-health",
@@ -189,7 +191,6 @@ dependencies = [
  "nestrs-server-timing",
  "nestrs-telemetry",
  "nestrs-testing",
- "nestrs-throttler",
  "poem",
  "schemars",
  "sea-orm",
@@ -571,6 +572,28 @@ name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+
+[[package]]
+name = "auth"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "identity",
+ "nestrs-auth",
+ "nestrs-config",
+ "nestrs-core",
+ "nestrs-health",
+ "nestrs-http",
+ "nestrs-telemetry",
+ "nestrs-testing",
+ "nestrs-throttler",
+ "poem",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
 
 [[package]]
 name = "autocfg"
@@ -1118,6 +1141,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "fake",
+ "nestrs-testing",
  "sea-orm",
  "sea-orm-migration",
  "tokio",
@@ -2064,6 +2088,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
 
 [[package]]
+name = "identity"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "uuid",
+]
+
+[[package]]
 name = "idna"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2628,6 +2661,7 @@ version = "0.1.0"
 dependencies = [
  "async-graphql",
  "async-graphql-poem",
+ "async-trait",
  "inventory",
  "nestrs-core",
  "nestrs-graphql-macros",
@@ -2751,6 +2785,7 @@ dependencies = [
  "nestrs-middleware",
  "poem",
  "sea-orm",
+ "serde",
  "tokio",
  "tracing",
 ]
@@ -6330,6 +6365,7 @@ name = "worker"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "nestrs-config",
  "nestrs-core",
  "nestrs-queue",
  "nestrs-schedule",
