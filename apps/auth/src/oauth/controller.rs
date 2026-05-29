@@ -1,16 +1,3 @@
-//! The authorization-server endpoints, on the OAuth2-standard paths:
-//!
-//! - `POST /token` — the **token endpoint** (RFC 6749 §3.2): an
-//!   `application/x-www-form-urlencoded` request returns the standard
-//!   `{access_token, token_type, expires_in}` envelope. Bearer tokens, signed with
-//!   the private key.
-//! - `GET /authorize` — the **authorization endpoint** (§3.1): redirects the
-//!   user-agent to the upstream provider to begin the OAuth flow.
-//! - `GET /callback` — the redirect URI the provider returns to; exchanges the
-//!   code and issues this app's token.
-//!
-//! The handlers hold no logic — they adapt the request to [`TokenIssuer`] and back.
-
 use std::sync::Arc;
 
 use nestrs_http::{controller, routes, Ctx};
@@ -27,9 +14,6 @@ use identity::Role;
 use crate::oauth::service::TokenIssuer;
 use crate::oauth::strategy::{Caller, OAuthGuard};
 
-/// An OAuth2 token request (`application/x-www-form-urlencoded`). The demo uses the
-/// `client_credentials` grant; `scope` carries the requested roles (space-separated,
-/// the OAuth convention), and `org_id` the tenant the token authorizes within.
 #[derive(Debug, Deserialize)]
 pub struct TokenRequest {
     pub grant_type: String,
@@ -38,7 +22,6 @@ pub struct TokenRequest {
     pub scope: Option<String>,
 }
 
-/// The standard OAuth2 token response envelope (RFC 6749 §5.1).
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct TokenResponse {
     pub access_token: String,
@@ -64,7 +47,6 @@ impl OAuthController {
             org_id,
             scope,
         } = body.0;
-        // Only one grant is wired in the demo; reject the rest per the spec.
         if grant_type != "client_credentials" {
             return Err(Error::from_string(
                 "unsupported_grant_type",
@@ -81,10 +63,7 @@ impl OAuthController {
         summary = "OAuth2 authorization endpoint — redirects to the provider",
         tags("OAuth2")
     )]
-    async fn authorize(&self) {
-        // Unreachable: with no `code`, OAuthGuard challenges with a 302 to the
-        // provider before this handler runs.
-    }
+    async fn authorize(&self) {}
 
     #[get("/callback")]
     #[use_guards(OAuthGuard)]
@@ -99,7 +78,6 @@ impl OAuthController {
 }
 
 impl OAuthController {
-    /// Sign a token and wrap it in the standard OAuth2 response envelope.
     fn issue(&self, org_id: Uuid, roles: Vec<Role>) -> Result<TokenResponse> {
         let (access_token, expires_in) = self.issuer.issue(org_id, roles).map_err(|err| {
             Error::from_string(err.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
@@ -112,8 +90,6 @@ impl OAuthController {
     }
 }
 
-/// Map OAuth `scope` tokens to roles. Unknown scopes are ignored; an empty scope
-/// defaults to a plain `user`.
 fn roles_from_scope(scope: Option<&str>) -> Vec<Role> {
     let roles: Vec<Role> = scope
         .unwrap_or("")

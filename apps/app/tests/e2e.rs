@@ -1,7 +1,3 @@
-//! End-to-end: boot the real `AppModule` through the in-process harness and hit
-//! the live HTTP surface. No external resources — the regression this guards is
-//! the app's wiring (DI graph + access-graph + route mounting).
-
 use app::AppModule;
 use nestrs_testing::TestApp;
 

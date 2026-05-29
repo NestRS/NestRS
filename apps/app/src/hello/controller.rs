@@ -29,10 +29,6 @@ mod tests {
 
     #[test]
     fn controller_declares_its_injected_dependency_for_the_access_graph() {
-        // A controller is built at mount time, so `dependencies` (register
-        // ordering) is empty; `#[routes]` bridges its `#[inject]` keys into
-        // `injected` (via the inherent fn `#[controller]` emits) so the
-        // access-graph check governs it too.
         assert!(HelloController::dependencies().is_empty());
         assert!(
             HelloController::injected().contains(&TypeId::of::<HelloService>()),

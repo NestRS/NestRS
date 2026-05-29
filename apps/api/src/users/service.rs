@@ -18,19 +18,10 @@ use crate::users::entity::{
 
 #[injectable]
 pub struct UsersService {
-    // Held for the dataloaders' keyed batch queries and the shutdown hook, which
-    // run outside a request's ambient scope. Request-path reads/writes go through
-    // `Repo` (via the inherited `CrudService` methods), which carries the ambient
-    // executor (the transaction) and the caller's row-level filter transparently.
     #[inject]
     db: Arc<DatabaseConnection>,
 }
 
-// The users data API. It inherits `list`/`page`/`access`/`update`/`delete` from
-// `CrudService`; `create` is the one operation it cannot inherit — the user table
-// has a server-side `org_id` scope column the generic create leaves unset — so the
-// controller/resolver call `create_in_org` below, stamping the column from the
-// authenticated actor. (The inherited `create` exists but is unused for users.)
 impl CrudService for UsersService {
     type Entity = Users;
     type Create = CreateUserInput;
@@ -38,9 +29,6 @@ impl CrudService for UsersService {
 }
 
 impl UsersService {
-    /// Tenant-aware create: stamp the caller's `org_id` (which the generic
-    /// `CrudService::create` cannot know) before inserting in the request
-    /// transaction. The controller/resolver pass the actor's org.
     pub async fn create_in_org(
         &self,
         input: CreateUserInput,

@@ -48,8 +48,6 @@ mod tests {
 
     #[test]
     fn consumer_declares_its_injected_dependency_for_the_access_graph() {
-        // Built by the QueueWorker transport, so `dependencies` is empty; the
-        // access-graph check reads `injected` instead.
         assert!(AudioConsumer::dependencies().is_empty());
         assert!(
             AudioConsumer::injected().contains(&TypeId::of::<Transcoder>()),

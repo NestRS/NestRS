@@ -9,11 +9,6 @@ use uuid::Uuid;
 
 use crate::orgs::entity::{self, CreateOrgInput, Entity as Orgs, Org, UpdateOrgInput};
 
-/// The org data API — the single audited gateway to the org table. It inherits
-/// the full CRUD from [`CrudService`] (list/page/access/create/update/delete) and
-/// adds the `by_id` dataloader that backs `User.org` (a keyed batch that runs
-/// outside a request's ambient scope, hence its own connection). The generated
-/// `#[crud]` controller and resolver delegate every operation here.
 #[injectable]
 pub struct OrgsService {
     #[inject]

@@ -1,17 +1,3 @@
-//! End-to-end against the **real Redis** the worker uses.
-//!
-//! The worker has no HTTP surface, so it boots through the harness's headless
-//! path and drives its transports directly. Two guarantees:
-//!
-//! 1. The real `AppModule` boots — `QueueModule` connects to Redis in the factory
-//!    phase, the access-graph check passes, and both the `Scheduler` and
-//!    `QueueWorker` transports configure against the assembled container.
-//! 2. A job pushed to Redis is actually consumed — a probe processor on its own
-//!    queue reports back the exact payload it received, proving the
-//!    producer → Redis → `QueueWorker` → processor round-trip.
-//!
-//! Requires a reachable Redis at `REDIS_URL` (the devcontainer provides one).
-
 use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -46,9 +32,6 @@ async fn worker_app_boots_and_transports_configure() {
         .await
         .expect("AppModule boots and connects to Redis");
 
-    // spawn_transport runs each transport's `configure` (discovery + connection
-    // resolution) before serving, so an Ok return proves the wiring the worker
-    // depends on. A brief serve window then a clean shutdown.
     let scheduler = app
         .spawn_transport(Scheduler::new())
         .await
@@ -64,15 +47,11 @@ async fn worker_app_boots_and_transports_configure() {
     scheduler.shutdown().await.expect("Scheduler stops cleanly");
 }
 
-// --- A probe processor on its own queue, to observe a real round-trip ---
-
 #[derive(Clone, Serialize, Deserialize)]
 struct ProbeJob {
     tag: String,
 }
 
-/// The probe processor reports each consumed payload's tag here so the test can
-/// confirm its own job came back. Set by the round-trip test before serving.
 static PROBE_TX: OnceLock<tokio::sync::mpsc::UnboundedSender<String>> = OnceLock::new();
 
 #[processor(queue = "nestrs-e2e-probe", concurrency = 1, retries = 0)]
@@ -122,8 +101,6 @@ async fn enqueued_job_is_processed_through_real_redis() {
         .await
         .expect("enqueue onto the probe queue");
 
-    // Wait for *our* job. A stale payload from a prior run (different tag) is
-    // ignored — we only need proof the enqueued job round-tripped.
     let saw_our_job = tokio::time::timeout(Duration::from_secs(15), async {
         while let Some(received) = rx.recv().await {
             if received == tag {
