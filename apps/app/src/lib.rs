@@ -1,4 +1,4 @@
-pub mod app;
-pub mod hello;
+mod app;
+mod hello;
 
 pub use app::AppModule;

@@ -4,7 +4,7 @@ use anyhow::Result;
 use nestrs_queue::{async_trait, processor, Processor};
 
 use crate::audio::dto::TranscodeJob;
-use crate::audio::transcoder::Transcoder;
+use crate::audio::service::Transcoder;
 
 #[processor(queue = "audio", concurrency = 5, retries = 3)]
 pub struct AudioConsumer {
@@ -30,7 +30,7 @@ mod tests {
 
     use super::AudioConsumer;
     use crate::audio::dto::AUDIO_QUEUE;
-    use crate::audio::transcoder::Transcoder;
+    use crate::audio::service::Transcoder;
     use crate::audio::AudioModule;
 
     #[test]

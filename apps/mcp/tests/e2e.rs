@@ -40,7 +40,7 @@ async fn weather_tool_self_mounts_the_mcp_endpoint() {
         endpoints
             .iter()
             .any(|d| d.meta.label() == "mcp" && d.meta.path() == "/mcp"),
-        "the #[mcp] WeatherController self-mounts an MCP endpoint at /mcp",
+        "the #[mcp] WeatherTool self-mounts an MCP endpoint at /mcp",
     );
 }
 
