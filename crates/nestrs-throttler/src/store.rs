@@ -7,8 +7,9 @@
 //! object then.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
 use std::time::{Duration, Instant};
+
+use parking_lot::Mutex;
 
 use crate::throttle::Throttle;
 
@@ -52,7 +53,7 @@ impl InMemoryThrottler {
     /// elapses, after which the window resets.
     pub fn hit(&self, key: &str, limit: Throttle) -> Decision {
         let now = Instant::now();
-        let mut windows = self.windows.lock().expect("throttler mutex poisoned");
+        let mut windows = self.windows.lock();
         let window = windows.entry(key.to_owned()).or_insert(Window {
             start: now,
             count: 0,

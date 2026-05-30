@@ -4,7 +4,9 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+
+use parking_lot::RwLock;
 
 /// An event handed to the bus, type-erased so handlers for different event types
 /// share one registry. Downcast back to the concrete event by its subscription.
@@ -46,7 +48,6 @@ impl EventBus {
         });
         self.handlers
             .write()
-            .expect("event registry lock is not poisoned")
             .entry(TypeId::of::<E>())
             .or_default()
             .push(erased);
@@ -60,7 +61,6 @@ impl EventBus {
         let handlers = self
             .handlers
             .read()
-            .expect("event registry lock is not poisoned")
             .get(&TypeId::of::<E>())
             .cloned();
         let Some(handlers) = handlers else { return };

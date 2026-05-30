@@ -20,7 +20,9 @@
 
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+
+use parking_lot::Mutex;
 
 use crate::Container;
 
@@ -54,7 +56,7 @@ impl RequestScope {
         let id = TypeId::of::<T>();
         match self.root.scoped_factory(id) {
             Some(factory) => {
-                let mut cache = self.cache.lock().expect("request scope cache poisoned");
+                let mut cache = self.cache.lock();
                 let any = cache
                     .entry(id)
                     .or_insert_with(|| factory(&self.root))

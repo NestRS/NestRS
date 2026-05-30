@@ -22,9 +22,10 @@
 use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use nestrs_core::injectable;
+use parking_lot::Mutex;
 use serde::Serialize;
 use tokio::sync::mpsc::UnboundedSender;
 
@@ -81,7 +82,7 @@ impl<N: 'static> WsServer<N> {
     /// connection loop on upgrade; pairs with [`disconnect`](Self::disconnect).
     pub(crate) fn connect(&self, outbox: UnboundedSender<String>) -> ConnId {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        self.conns.lock().unwrap().insert(
+        self.conns.lock().insert(
             id,
             Conn {
                 outbox,
@@ -94,7 +95,7 @@ impl<N: 'static> WsServer<N> {
     /// Drop a connection (and all its room memberships). Called when its socket
     /// closes.
     pub(crate) fn disconnect(&self, id: ConnId) {
-        self.conns.lock().unwrap().remove(&id);
+        self.conns.lock().remove(&id);
     }
 
     /// Send `data` under `event` to **every** live connection. Returns how many
@@ -132,7 +133,7 @@ impl<N: 'static> WsServer<N> {
 
     /// Number of live connections — for diagnostics and tests.
     pub fn connection_count(&self) -> usize {
-        self.conns.lock().unwrap().len()
+        self.conns.lock().len()
     }
 }
 
@@ -156,13 +157,13 @@ pub trait Registry: Send + Sync + 'static {
 
 impl<N: 'static> Registry for WsServer<N> {
     fn join(&self, id: ConnId, room: &str) {
-        if let Some(conn) = self.conns.lock().unwrap().get_mut(&id) {
+        if let Some(conn) = self.conns.lock().get_mut(&id) {
             conn.rooms.insert(room.to_owned());
         }
     }
 
     fn leave(&self, id: ConnId, room: &str) {
-        if let Some(conn) = self.conns.lock().unwrap().get_mut(&id) {
+        if let Some(conn) = self.conns.lock().get_mut(&id) {
             conn.rooms.remove(room);
         }
     }
@@ -171,7 +172,7 @@ impl<N: 'static> Registry for WsServer<N> {
         let Ok(frame) = WsEnvelope::encode(event, &data) else {
             return 0;
         };
-        let conns = self.conns.lock().unwrap();
+        let conns = self.conns.lock();
         conns
             .values()
             .filter(|conn| conn.outbox.send(frame.clone()).is_ok())
@@ -182,7 +183,7 @@ impl<N: 'static> Registry for WsServer<N> {
         let Ok(frame) = WsEnvelope::encode(event, &data) else {
             return 0;
         };
-        let conns = self.conns.lock().unwrap();
+        let conns = self.conns.lock();
         conns
             .values()
             .filter(|conn| conn.rooms.contains(room))
@@ -194,7 +195,7 @@ impl<N: 'static> Registry for WsServer<N> {
         let Ok(frame) = WsEnvelope::encode(event, &data) else {
             return false;
         };
-        let conns = self.conns.lock().unwrap();
+        let conns = self.conns.lock();
         conns
             .get(&id)
             .is_some_and(|conn| conn.outbox.send(frame).is_ok())
