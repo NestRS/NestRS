@@ -174,11 +174,13 @@ dependencies = [
  "anyhow",
  "async-graphql",
  "db",
+ "futures-util",
  "identity",
  "nestrs-auth",
  "nestrs-authz",
  "nestrs-authz-graphql",
  "nestrs-authz-http",
+ "nestrs-authz-ws",
  "nestrs-config",
  "nestrs-core",
  "nestrs-graphql",
@@ -191,6 +193,7 @@ dependencies = [
  "nestrs-server-timing",
  "nestrs-telemetry",
  "nestrs-testing",
+ "nestrs-ws",
  "poem",
  "schemars",
  "sea-orm",
@@ -198,6 +201,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-tungstenite",
  "tracing",
  "uuid",
  "validator",
@@ -2619,6 +2623,19 @@ dependencies = [
  "serde",
  "serde_json",
  "uuid",
+]
+
+[[package]]
+name = "nestrs-authz-ws"
+version = "0.1.0"
+dependencies = [
+ "nestrs-authz",
+ "nestrs-core",
+ "nestrs-orm",
+ "nestrs-ws",
+ "poem",
+ "sea-orm",
+ "tracing",
 ]
 
 [[package]]

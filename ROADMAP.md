@@ -21,14 +21,14 @@ The authoritative record of *what was decided and why* is
   figure is the remaining one to publish.
 - Fill in crate-level docs and grow the `apps/` examples.
 
-## Next — real-time: completing the WebSocket gateway
+## Done — real-time: the WebSocket gateway
 
-The gateway now ships with server→client push — request/response message
-handling, a connection registry, broadcast, rooms and per-gateway namespacing,
-discovered and self-mounted on the HTTP transport, sharing controller DI,
-connection-level *and* per-message guards, and `on_connect` / `on_disconnect`
-lifecycle hooks. The one piece left is the ambient data context — the plumbing
-Server-Sent Events and GraphQL subscriptions will also reuse:
+The gateway ships complete: request/response message handling, a connection
+registry, broadcast, rooms and per-gateway namespacing, discovered and
+self-mounted on the HTTP transport, sharing controller DI, connection-level
+*and* per-message guards, `on_connect` / `on_disconnect` lifecycle hooks, and now
+the ambient data context — the plumbing Server-Sent Events and GraphQL
+subscriptions will also reuse:
 
 - **Server→client broadcast, a connection registry & per-gateway namespacing** —
   *shipped*. `WsServer<N>` (the `@WebSocketServer` analog, the `Global` namespace
@@ -47,22 +47,22 @@ Server-Sent Events and GraphQL subscriptions will also reuse:
   gateway struct; and an `#[on_connect]` / `#[on_disconnect]` method on the
   `#[messages]` impl block is the `OnGatewayConnection` / `OnGatewayDisconnect`
   analog. `apps/chat` exercises both over a real socket.
-- **An ambient data context in the socket task** — the last gap, and the
-  highest-value one. The connection loop runs *after* the upgrade request
-  completes (the global `DbContext` interceptor's executor scope and the authz
-  ability both unwind with that request), so neither task-local reaches a message
-  handler — the same constraint a `#[dataloader]` batch has. The seam is already
-  mapped: `nestrs-ws` would expose an orm/authz-agnostic per-message hook
-  (mirroring GraphQL's `OperationGuard` — capture opaque per-connection state from
-  the post-guard upgrade request, then wrap each dispatch), and a bridge crate
-  would implement it by re-installing the executor (`nestrs_orm::with_executor`,
-  pool) and ability (`nestrs_authz::with_ability`, captured from the connection
-  guards) around the handler future — letting a gateway handler use `Repo` like a
-  controller, row-level filtering included. This crosses *extending the
-  transparent data layer* (a request executor for non-HTTP transports) and is
-  security-sensitive, so it wants a deliberate design pass and a DB-backed,
-  authenticated real-socket e2e (a gateway on an app that has both a database and
-  authz) rather than a rushed landing.
+- **An ambient data context in the socket task** — *shipped*. The connection loop
+  runs *after* the upgrade request completes (the global `DbContext` interceptor's
+  executor scope and the authz ability both unwind with that request), so neither
+  task-local reached a message handler — the same constraint a `#[dataloader]`
+  batch has. `nestrs-ws` now exposes an orm/authz-agnostic per-connection hook,
+  the `SocketContext` seam (mirroring GraphQL's `OperationGuard`): it captures
+  opaque per-connection state from the post-guard upgrade request, then wraps each
+  dispatch. The `nestrs-authz-ws` bridge implements it by re-installing the
+  executor (`with_executor`, pool) and the caller's ability (`with_ability`,
+  captured from the connection guards) around the handler future — so a gateway
+  handler uses `Repo` like a controller, row-level filtering included. `apps/api`
+  is the exemplar (a `UsersGateway` whose `users.list` scopes to the caller's org)
+  with a DB-backed, authenticated real-socket e2e. The executor binds the
+  connection **pool**, so a message runs without a per-message transaction (a
+  WebSocket message has no safe/mutating HTTP method to classify) — the one piece
+  deliberately deferred.
 
 ## Next — extending the transparent data layer
 
@@ -82,9 +82,11 @@ remains builds on the same primitive:
   likewise gate its `WHERE` on `condition_for(Update/Delete)`, so a caller cannot
   mutate a row outside its scope even by id.
 - **A request executor for non-HTTP transports** — the `DbContext` interceptor binds
-  the executor to an HTTP request; a queue job or cron tick has no ambient executor,
-  so those paths still inject `Arc<DatabaseConnection>`. A transport-agnostic
-  installer would extend `Repo` (and per-job transactions) to the worker surfaces.
+  the executor to an HTTP request, and `nestrs-authz-ws`'s `SocketContext` bridge now
+  binds it (and the ability) for a WebSocket message; a queue job or cron tick still
+  has no ambient executor, so those paths inject `Arc<DatabaseConnection>`. A
+  transport-agnostic installer would extend `Repo` (and per-job transactions) to the
+  worker surfaces too.
 
 ## Next — hardening the guarantees
 

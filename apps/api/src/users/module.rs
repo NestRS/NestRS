@@ -1,9 +1,11 @@
 use nestrs_core::module;
+use nestrs_ws::WsModule;
 
 use crate::users::controller::UsersController;
+use crate::users::gateway::UsersGateway;
 use crate::users::service::UsersService;
 
-#[module(providers = [UsersService, UsersController])]
+#[module(imports = [WsModule], providers = [UsersService, UsersController, UsersGateway])]
 pub struct UsersModule;
 
 #[cfg(test)]

@@ -1,0 +1,23 @@
+[package]
+name = "nestrs-authz-ws"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+description = "WebSocket surface for nestrs-authz: re-install the request executor and the caller's Ability around each gateway message, so a socket handler's Repo scopes exactly like a controller (the WS analog of nestrs-authz-http's Authorize)."
+
+[dependencies]
+nestrs-authz.workspace = true
+# `WsDataContext` is an `#[injectable]` provider implementing the `SocketContext` seam.
+nestrs-core.workspace = true
+# The `SocketContext` seam this implements, plus the `WsReply`/`BoxFuture`/`Captured` currency.
+nestrs-ws.workspace = true
+# The connection loop runs off the request task, so the bridge re-installs the
+# ambient executor (pool) the HTTP `DbContext` interceptor binds per request.
+nestrs-orm.workspace = true
+# The bridge captures the ambient state attached to the poem upgrade request.
+poem.workspace = true
+# `Executor::Pool` wraps the shared `DatabaseConnection` the bridge injects.
+sea-orm.workspace = true
+tracing.workspace = true

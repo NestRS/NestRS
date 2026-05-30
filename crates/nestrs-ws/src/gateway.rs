@@ -5,6 +5,7 @@ use futures_util::{SinkExt, StreamExt};
 use poem::web::websocket::{Message, WebSocket};
 use poem::{Endpoint, FromRequest, IntoResponse, Request, Response};
 
+use crate::context::{Captured, SocketContext};
 use crate::envelope::WsEnvelope;
 use crate::guard::MessageGuardTable;
 use crate::server::{Registry, WsClient, WsServer};
@@ -45,17 +46,20 @@ pub trait Gateway: Send + Sync + 'static {
 /// the gateway's connection loop. Called by the `#[messages]`-generated mount
 /// closure with the gateway built once from the container (shared across every
 /// connection, like a NestJS gateway singleton), the shared [`WsServer`] registry
-/// resolved alongside it, and the per-event [`MessageGuardTable`] the macro
-/// resolved from the container.
+/// resolved alongside it, the per-event [`MessageGuardTable`] the macro resolved
+/// from the container, and the optional [`SocketContext`] bridge (`None` when no
+/// app bound one — the gateway then dispatches with no ambient data context).
 pub fn gateway_endpoint<G: Gateway, N: 'static>(
     gateway: Arc<G>,
     server: Arc<WsServer<N>>,
     guards: MessageGuardTable,
+    ctx: Option<Arc<dyn SocketContext>>,
 ) -> GatewayEndpoint<G, N> {
     GatewayEndpoint {
         gateway,
         server,
         guards: Arc::new(guards),
+        ctx,
     }
 }
 
@@ -68,6 +72,10 @@ pub struct GatewayEndpoint<G, N: 'static = crate::server::Global> {
     gateway: Arc<G>,
     server: Arc<WsServer<N>>,
     guards: Arc<MessageGuardTable>,
+    /// The per-connection ambient-data bridge, resolved once from the container
+    /// at mount. `None` when no app bound one — the connection loop then
+    /// dispatches without installing any ambient executor/ability.
+    ctx: Option<Arc<dyn SocketContext>>,
 }
 
 impl<G: Gateway, N: 'static> Endpoint for GatewayEndpoint<G, N> {
@@ -76,11 +84,20 @@ impl<G: Gateway, N: 'static> Endpoint for GatewayEndpoint<G, N> {
     async fn call(&self, req: Request) -> poem::Result<Response> {
         let (req, mut body) = req.split();
         let ws = WebSocket::from_request(&req, &mut body).await?;
+        // Capture the per-connection ambient state *here*, on the post-guard
+        // upgrade request — the connection-level guards have already attached the
+        // principal/ability to its extensions, and the request does not survive
+        // into the connection task that the upgrade spawns. The bridge and its
+        // captured state always travel together, so they ride as one `Option`.
+        let ambient = self
+            .ctx
+            .as_ref()
+            .map(|ctx| (ctx.clone(), ctx.capture(&req)));
         let gateway = Arc::clone(&self.gateway);
         let server = Arc::clone(&self.server);
         let guards = Arc::clone(&self.guards);
         Ok(ws
-            .on_upgrade(move |socket| serve_connection(gateway, server, guards, socket))
+            .on_upgrade(move |socket| serve_connection(gateway, server, guards, ambient, socket))
             .into_response())
     }
 }
@@ -96,6 +113,7 @@ async fn serve_connection<G: Gateway, N: 'static>(
     gateway: Arc<G>,
     server: Arc<WsServer<N>>,
     guards: Arc<MessageGuardTable>,
+    ambient: Option<(Arc<dyn SocketContext>, Captured)>,
     socket: poem::web::websocket::WebSocketStream,
 ) {
     let (mut sink, mut stream) = socket.split();
@@ -124,7 +142,9 @@ async fn serve_connection<G: Gateway, N: 'static>(
     while let Some(message) = stream.next().await {
         match message {
             Ok(Message::Text(text)) => {
-                if let Some(reply) = handle_text(&*gateway, &guards, &client, &text).await {
+                if let Some(reply) =
+                    handle_text(&*gateway, &guards, ambient.as_ref(), &client, &text).await
+                {
                     // A handler's direct reply rides the same outbox as a push,
                     // so ordering relative to broadcasts the handler triggered is
                     // preserved. A closed channel means the writer is gone.
@@ -157,9 +177,15 @@ async fn serve_connection<G: Gateway, N: 'static>(
 /// the reply frame (or `None` for a `()`-returning handler). A guard rejection
 /// short-circuits to an error frame under the request's event name; the handler
 /// never runs.
+///
+/// When a [`SocketContext`] bridge is present, the dispatch is wrapped in its
+/// [`around`](SocketContext::around) with the connection's captured state, so the
+/// handler runs with the request executor and the caller's ability installed —
+/// the data layer reaching the socket exactly as it reaches a controller.
 async fn handle_text<G: Gateway>(
     gateway: &G,
     guards: &MessageGuardTable,
+    ambient: Option<&(Arc<dyn SocketContext>, Captured)>,
     client: &WsClient,
     text: &str,
 ) -> Option<String> {
@@ -171,7 +197,15 @@ async fn handle_text<G: Gateway>(
     if let Err(reason) = guards.check(client, &event, &envelope.data).await {
         return Some(error_frame(&event, &reason));
     }
-    match gateway.dispatch(client, &event, envelope.data).await {
+    // `dispatch` (via `#[async_trait]`) already returns a boxed `Send` future —
+    // exactly the `BoxFuture` an `around` takes — so the bridge wraps it with no
+    // extra boxing, and the no-context path runs it directly.
+    let dispatch = gateway.dispatch(client, &event, envelope.data);
+    let reply = match ambient {
+        Some((ctx, captured)) => ctx.around(captured, dispatch).await,
+        None => dispatch.await,
+    };
+    match reply {
         WsReply::Reply(data) => serde_json::to_string(&WsEnvelope { event, data }).ok(),
         WsReply::None => None,
         WsReply::Error(message) => Some(error_frame(&event, &message)),

@@ -11,6 +11,7 @@ nestrs-config.workspace = true
 nestrs-authz.workspace = true
 nestrs-authz-http.workspace = true
 nestrs-authz-graphql.workspace = true
+nestrs-authz-ws.workspace = true
 nestrs-graphql.workspace = true
 nestrs-health.workspace = true
 nestrs-http.workspace = true
@@ -20,6 +21,7 @@ nestrs-orm.workspace = true
 nestrs-resource.workspace = true
 nestrs-server-timing.workspace = true
 nestrs-telemetry = { workspace = true, features = ["http"] }
+nestrs-ws.workspace = true
 identity.workspace = true
 poem.workspace = true
 tokio.workspace = true
@@ -44,3 +46,7 @@ nestrs-testing = { workspace = true, features = ["telemetry", "orm"] }
 # The e2e migrates the throwaway database with the same migrations production
 # uses; `db` carries the `Migrator`.
 db = { path = "../db" }
+# The WebSocket e2e drives the gateway over a real socket (the in-process
+# TestClient cannot perform an upgrade), authenticated with a bearer header.
+futures-util.workspace = true
+tokio-tungstenite = "0.27"
