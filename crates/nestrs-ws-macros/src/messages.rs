@@ -210,7 +210,14 @@ pub(crate) fn messages(_args: TokenStream, input: TokenStream) -> TokenStream {
                             // container once and shared across every connection.
                             let mut __guards = ::nestrs_ws::MessageGuardTable::new();
                             #(#guard_inserts)*
-                            let __ep = ::nestrs_ws::gateway_endpoint(__gw, __server, __guards);
+                            // The optional ambient-data bridge (the executor +
+                            // ability re-installer), resolved once at mount. With
+                            // none bound, the connection loop dispatches without
+                            // any ambient context.
+                            let __ctx = ::nestrs_core::Container::get_dyn::<
+                                dyn ::nestrs_ws::SocketContext,
+                            >(__container);
+                            let __ep = ::nestrs_ws::gateway_endpoint(__gw, __server, __guards, __ctx);
                             let __ep = <#self_ty>::__nestrs_gateway_layers(__container, __ep);
                             __route.at(<#self_ty>::PATH, __ep)
                         },

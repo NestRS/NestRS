@@ -1,9 +1,16 @@
 use api::AppModule;
+use futures_util::{SinkExt, StreamExt};
 use identity::{Claims, Role};
 use nestrs_auth::{JwtOptions, JwtService};
+use nestrs_http::HttpTransport;
 use nestrs_testing::{EphemeralDatabase, TestApp};
 use poem::http::{header, StatusCode};
-use serde_json::json;
+use sea_orm::sea_query::Query;
+use sea_orm::{ConnectionTrait, DatabaseConnection, DeriveIden};
+use serde_json::{json, Value};
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::header::AUTHORIZATION as WS_AUTHORIZATION;
+use tokio_tungstenite::tungstenite::Message;
 use uuid::Uuid;
 
 const ORG_ID: &str = "018f0000-0000-7000-8000-000000000000";
@@ -24,11 +31,11 @@ async fn boot() -> (EphemeralDatabase, TestApp) {
     (db, app)
 }
 
-async fn login(app: &TestApp) -> String {
-    token_for(app, ORG_ID, "admin").await
+async fn login() -> String {
+    token_for(ORG_ID, "admin").await
 }
 
-async fn token_for(_app: &TestApp, org_id: &str, role: &str) -> String {
+async fn token_for(org_id: &str, role: &str) -> String {
     let jwt = JwtService::new(JwtOptions::eddsa(
         DEV_PRIVATE_KEY,
         identity::DEV_PUBLIC_KEY_PEM,
@@ -130,7 +137,7 @@ async fn protected_route_rejects_a_missing_or_bogus_bearer_token() {
 #[tokio::test]
 async fn create_org_persists_and_is_listed_with_a_bearer_token() {
     let (_db, app) = boot().await;
-    let token = login(&app).await;
+    let token = login().await;
     let bearer = format!("Bearer {token}");
     let name = "Acme E2E";
 
@@ -170,11 +177,11 @@ async fn create_org_persists_and_is_listed_with_a_bearer_token() {
 async fn users_are_scoped_to_their_org_and_bound_by_id() {
     let (_db, app) = boot().await;
 
-    let bootstrap = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
+    let bootstrap = format!("Bearer {}", token_for(ORG_ID, "admin").await);
     let org_a = create_org(&app, &bootstrap, "Acme").await;
     let org_b = create_org(&app, &bootstrap, "Globex").await;
-    let token_a = format!("Bearer {}", token_for(&app, &org_a, "admin").await);
-    let token_b = format!("Bearer {}", token_for(&app, &org_b, "admin").await);
+    let token_a = format!("Bearer {}", token_for(&org_a, "admin").await);
+    let token_b = format!("Bearer {}", token_for(&org_b, "admin").await);
 
     let created = app
         .http()
@@ -234,21 +241,21 @@ async fn users_are_scoped_to_their_org_and_bound_by_id() {
 #[tokio::test]
 async fn a_plain_user_listing_masks_the_email() {
     let (_db, app) = boot().await;
-    let bootstrap = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
+    let bootstrap = format!("Bearer {}", token_for(ORG_ID, "admin").await);
     let org = create_org(&app, &bootstrap, "Initech").await;
 
     app.http()
         .post("/users")
         .header(
             header::AUTHORIZATION,
-            format!("Bearer {}", token_for(&app, &org, "admin").await),
+            format!("Bearer {}", token_for(&org, "admin").await),
         )
         .body_json(&json!({ "name": "Bob", "email": "bob@initech.test" }))
         .send()
         .await
         .assert_status_is_ok();
 
-    let user = format!("Bearer {}", token_for(&app, &org, "user").await);
+    let user = format!("Bearer {}", token_for(&org, "user").await);
     let listed = app
         .http()
         .get("/users")
@@ -274,9 +281,9 @@ async fn a_plain_user_listing_masks_the_email() {
 #[tokio::test]
 async fn a_failed_mutation_persists_nothing() {
     let (_db, app) = boot().await;
-    let bootstrap = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
+    let bootstrap = format!("Bearer {}", token_for(ORG_ID, "admin").await);
     let org = create_org(&app, &bootstrap, "Hooli").await;
-    let admin = format!("Bearer {}", token_for(&app, &org, "admin").await);
+    let admin = format!("Bearer {}", token_for(&org, "admin").await);
 
     app.http()
         .post("/users")
@@ -300,7 +307,7 @@ async fn a_failed_mutation_persists_nothing() {
 #[tokio::test]
 async fn orgs_admin_sees_all_but_a_plain_user_is_scoped_to_its_own() {
     let (_db, app) = boot().await;
-    let admin = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
+    let admin = format!("Bearer {}", token_for(ORG_ID, "admin").await);
     let org_x = create_org(&app, &admin, "OrgX").await;
     let org_y = create_org(&app, &admin, "OrgY").await;
 
@@ -324,7 +331,7 @@ async fn orgs_admin_sees_all_but_a_plain_user_is_scoped_to_its_own() {
         "the admin sees every org: {admin_names:?}",
     );
 
-    let user_x = format!("Bearer {}", token_for(&app, &org_x, "user").await);
+    let user_x = format!("Bearer {}", token_for(&org_x, "user").await);
     let user_list = app
         .http()
         .get("/orgs")
@@ -364,12 +371,12 @@ async fn orgs_admin_sees_all_but_a_plain_user_is_scoped_to_its_own() {
 #[tokio::test]
 async fn graphql_requires_a_jwt_and_scopes_to_the_callers_org() {
     let (_db, app) = boot().await;
-    let admin = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
+    let admin = format!("Bearer {}", token_for(ORG_ID, "admin").await);
     let org_a = create_org(&app, &admin, "GqlAcme").await;
-    let token_a = format!("Bearer {}", token_for(&app, &org_a, "admin").await);
+    let token_a = format!("Bearer {}", token_for(&org_a, "admin").await);
     let token_b = format!(
         "Bearer {}",
-        token_for(&app, &create_org(&app, &admin, "GqlGlobex").await, "admin").await
+        token_for(&create_org(&app, &admin, "GqlGlobex").await, "admin").await
     );
 
     let created = app
@@ -494,11 +501,11 @@ async fn graphql_requires_a_jwt_and_scopes_to_the_callers_org() {
 #[tokio::test]
 async fn graphql_namesakes_field_stays_within_the_callers_org() {
     let (_db, app) = boot().await;
-    let admin = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
+    let admin = format!("Bearer {}", token_for(ORG_ID, "admin").await);
     let org_a = create_org(&app, &admin, "NsA").await;
     let org_b = create_org(&app, &admin, "NsB").await;
-    let token_a = format!("Bearer {}", token_for(&app, &org_a, "admin").await);
-    let token_b = format!("Bearer {}", token_for(&app, &org_b, "admin").await);
+    let token_a = format!("Bearer {}", token_for(&org_a, "admin").await);
+    let token_b = format!("Bearer {}", token_for(&org_b, "admin").await);
 
     for (tok, email) in [
         (&token_a, "twina@x.test"),
@@ -550,7 +557,7 @@ async fn graphql_namesakes_field_stays_within_the_callers_org() {
 #[tokio::test]
 async fn crud_generated_update_and_delete_round_trip() {
     let (_db, app) = boot().await;
-    let admin = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
+    let admin = format!("Bearer {}", token_for(ORG_ID, "admin").await);
 
     let id = create_org(&app, &admin, "Before").await;
 
@@ -597,7 +604,7 @@ async fn crud_generated_update_and_delete_round_trip() {
 #[tokio::test]
 async fn crud_cursor_pagination_walks_the_collection_in_order() {
     let (_db, app) = boot().await;
-    let admin = format!("Bearer {}", token_for(&app, ORG_ID, "admin").await);
+    let admin = format!("Bearer {}", token_for(ORG_ID, "admin").await);
 
     let mut created = Vec::new();
     for i in 0..5 {
@@ -650,4 +657,143 @@ async fn crud_cursor_pagination_walks_the_collection_in_order() {
         seen, created,
         "keyset pages preserve ascending-id (chronological) order",
     );
+}
+
+const WS_ORG_A: &str = "018f0000-0000-7000-8000-00000000a001";
+const WS_ORG_B: &str = "018f0000-0000-7000-8000-00000000b002";
+
+#[derive(DeriveIden)]
+enum Org {
+    Table,
+    Id,
+    Name,
+}
+
+#[derive(DeriveIden)]
+enum User {
+    Table,
+    Id,
+    OrgId,
+    Name,
+    Email,
+}
+
+async fn seed_org_with_user(
+    conn: &DatabaseConnection,
+    org_id: &str,
+    org_name: &str,
+    user_name: &str,
+) {
+    let org_id = Uuid::parse_str(org_id).expect("valid org uuid");
+    let org = Query::insert()
+        .into_table(Org::Table)
+        .columns([Org::Id, Org::Name])
+        .values_panic([org_id.into(), org_name.into()])
+        .to_owned();
+    conn.execute(&org).await.expect("insert org");
+    let user = Query::insert()
+        .into_table(User::Table)
+        .columns([User::Id, User::OrgId, User::Name, User::Email])
+        .values_panic([
+            Uuid::now_v7().into(),
+            org_id.into(),
+            user_name.into(),
+            format!("{}@ws.test", user_name.to_lowercase()).into(),
+        ])
+        .to_owned();
+    conn.execute(&user).await.expect("insert user");
+}
+
+async fn connect_ws(bind: &str, bearer: &str) -> Socket {
+    let url = format!("ws://{bind}/ws");
+    for _ in 0..50 {
+        let mut request = url.as_str().into_client_request().expect("ws request");
+        request
+            .headers_mut()
+            .insert(WS_AUTHORIZATION, bearer.parse().expect("bearer header"));
+        match tokio_tungstenite::connect_async(request).await {
+            Ok((socket, _)) => return socket,
+            Err(_) => tokio::time::sleep(std::time::Duration::from_millis(20)).await,
+        }
+    }
+    panic!("could not connect to {url}");
+}
+
+async fn ws_user_names(socket: &mut Socket) -> Vec<String> {
+    socket
+        .send(Message::Text(
+            json!({ "event": "users.list" }).to_string().into(),
+        ))
+        .await
+        .expect("send users.list");
+    let frame = ws_next_json(socket).await;
+    assert_eq!(frame["event"], "users.list");
+    frame["data"]
+        .as_array()
+        .expect("a users array")
+        .iter()
+        .map(|u| u["name"].as_str().expect("a name").to_owned())
+        .collect()
+}
+
+#[tokio::test]
+async fn ws_gateway_scopes_users_list_to_the_callers_org() {
+    let bind = "127.0.0.1:13350";
+
+    let db = EphemeralDatabase::create::<db::Migrator>()
+        .await
+        .expect("create + migrate a throwaway database");
+    seed_org_with_user(&db.connection(), WS_ORG_A, "WsAcme", "WsAda").await;
+    seed_org_with_user(&db.connection(), WS_ORG_B, "WsGlobex", "WsZoe").await;
+
+    let app = TestApp::builder()
+        .module::<AppModule>()
+        .with_test_telemetry()
+        .provide_arc(db.connection())
+        .build_headless()
+        .await
+        .expect("AppModule boots headless against the throwaway database");
+    let handle = app
+        .spawn_transport(HttpTransport::new().bind(bind))
+        .await
+        .expect("HTTP transport serves the self-mounted gateway");
+
+    // Org A's admin lists users over the socket: the connection guards built the
+    // ability on the upgrade request, and the `WsDataContext` bridge re-installed
+    // it (and the executor) around the dispatch — so the handler's `Repo` read is
+    // scoped to org A, exactly like the REST `/users` route.
+    let token_a = format!("Bearer {}", token_for(WS_ORG_A, "admin").await);
+    let mut socket_a = connect_ws(bind, &token_a).await;
+    assert_eq!(
+        ws_user_names(&mut socket_a).await,
+        vec!["WsAda".to_string()],
+        "org A sees only its own user over the socket",
+    );
+    socket_a.close(None).await.ok();
+
+    // Org B's admin sees only org B's user — the ambient scope follows the caller,
+    // proving the row-level filter reaches the socket task.
+    let token_b = format!("Bearer {}", token_for(WS_ORG_B, "admin").await);
+    let mut socket_b = connect_ws(bind, &token_b).await;
+    assert_eq!(
+        ws_user_names(&mut socket_b).await,
+        vec!["WsZoe".to_string()],
+        "org B sees only its own user over the socket",
+    );
+    socket_b.close(None).await.ok();
+
+    handle.shutdown().await.expect("transport shuts down");
+}
+
+type Socket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+async fn ws_next_json(socket: &mut Socket) -> Value {
+    loop {
+        match socket.next().await.expect("a frame").expect("a message") {
+            Message::Text(text) => return serde_json::from_str(&text).expect("json envelope"),
+            Message::Close(_) => panic!("socket closed before a reply"),
+            _ => continue,
+        }
+    }
 }

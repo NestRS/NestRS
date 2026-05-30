@@ -673,16 +673,33 @@ service pushing to a namespaced registry injects `Arc<WsServer<MyNs>>` and must
 list it in `providers` (the gateway's self-provide is unchecked by the access
 graph).
 
-The one boundary that remains **deliberate** and load-bearing (named in the crate
-docs and the roadmap, so it doesn't read as an oversight): the connection loop runs
-in a task *after* the upgrade request completes, so the request scope, ORM executor
-and authz ability task-locals do **not** reach a handler (the same constraint a
-`#[dataloader]` batch has — a gateway handler injects `Arc<DatabaseConnection>`).
-`apps/chat` is the exemplar — broadcast, rooms, a per-message guard, the presence
-hooks, and a second `namespace`d gateway proving registry isolation — with a
-real-socket end-to-end test in its `tests/e2e.rs` (the in-process `TestClient`
-cannot perform a real upgrade, so the test spawns the real `HttpTransport` headless
-and drives it with a `tokio-tungstenite` client).
+The **ambient data context** reaches a gateway handler the same way it reaches a
+controller, through a seam **symmetric to GraphQL's `OperationGuard`**. The
+connection loop runs in a task *after* the upgrade request completes, so the ORM
+executor and authz ability task-locals an HTTP request installs have unwound by the
+time a message dispatches (the same constraint a `#[dataloader]` batch has). So
+`nestrs-ws` exposes an orm/authz-agnostic **`SocketContext`** seam (`capture` +
+`around`, resolved once at mount via `get_dyn`): `capture` reads opaque
+per-connection state from the *post-guard* upgrade request — the connection-level
+guards (`AuthGuard` + `AbilityGuard`) have already attached the principal/ability —
+and `around` wraps each dispatch with that state re-installed. `nestrs-authz-ws`'s
+**`WsDataContext`** implements it, binding the executor (`with_executor`, the
+connection **pool** — a WebSocket message has no safe/mutating method to classify,
+so there is no per-message transaction) and the caller's ability (`with_ability`),
+so a handler's `Repo` reads scope to the caller exactly like REST. Bound by listing
+`WsDataContext as dyn SocketContext` — the WS member of the
+`nestrs-authz-{http,graphql,ws}` bridge family, depending on `nestrs-orm` like
+`nestrs-authz-http`, leaving `nestrs-ws` itself orm/authz-agnostic. Unlike
+`GraphqlAbilityBridge` it does **not** re-run the guard chain (the connection guards
+already did), so it is not generic over the app's guards. **`apps/api`** is the
+DB+authz exemplar — a `UsersGateway` whose `users.list` scopes to the caller's org,
+with a DB-backed, authenticated real-socket e2e — while **`apps/chat`** is the pure
+real-time exemplar (broadcast, rooms, a per-message guard, the presence hooks, a
+second `namespace`d gateway). Both spawn the real `HttpTransport` headless and drive
+it with a `tokio-tungstenite` client, since the in-process `TestClient` cannot
+perform a real upgrade. The boundary that **does** remain deliberate: request-scoped
+DI providers (the `Scoped<T>` request scope) still do not bridge into the socket
+task — only the executor and ability do.
 
 ## Naming rules — strict
 

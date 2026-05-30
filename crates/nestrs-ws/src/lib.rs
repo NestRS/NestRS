@@ -85,20 +85,27 @@
 //! type-erased as [`Registry`]. A service that pushes to a namespaced registry
 //! injects `Arc<WsServer<MyNs>>` and must list it in a module's `providers`.
 //!
-//! # Deliberate limit of this cut
+//! # Ambient request data context
 //!
-//! - **No ambient request data context.** The connection loop runs in a task
-//!   *after* the upgrade request completes, so the HTTP request scope, the ORM
-//!   executor and the authz ability task-locals do **not** reach a handler — the
-//!   same constraint a `#[dataloader]` batch has. A gateway handler injects an
-//!   `Arc<DatabaseConnection>` and queries it directly.
+//! The connection loop runs in a task *after* the upgrade request completes, so
+//! the task-locals an HTTP request installs (the ORM executor, the authz
+//! ability) have already unwound by the time a message handler runs — the same
+//! constraint a `#[dataloader]` batch has. The [`SocketContext`] seam closes
+//! that without `nestrs-ws` depending on the ORM or authz: it captures opaque
+//! per-connection state from the post-guard upgrade request and re-installs it
+//! around each dispatch. The `nestrs-authz-ws` bridge implements it to bind the
+//! request executor and the caller's ability, so a gateway handler uses `Repo`
+//! with row-level filtering exactly like a controller. With no bridge bound a
+//! handler still injects an `Arc<DatabaseConnection>` and queries it directly.
 
+mod context;
 mod envelope;
 mod gateway;
 mod guard;
 mod module;
 mod server;
 
+pub use context::{BoxFuture, Captured, SocketContext};
 pub use envelope::{WsEnvelope, WsReply};
 pub use gateway::{gateway_endpoint, Gateway, GatewayEndpoint};
 pub use guard::{MessageGuard, MessageGuardTable};
