@@ -13,6 +13,8 @@ nestrs-events-macros.workspace = true
 async-trait.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
+# Handler-registry lock — poison-free locking on the emit path.
+parking_lot.workspace = true
 
 [dev-dependencies]
 tokio.workspace = true

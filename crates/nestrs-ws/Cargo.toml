@@ -28,3 +28,5 @@ futures-util.workspace = true
 # registry pushes through.
 tokio = { workspace = true }
 tracing.workspace = true
+# Connection registry lock — parking_lot for poison-free, panic-free locking.
+parking_lot.workspace = true

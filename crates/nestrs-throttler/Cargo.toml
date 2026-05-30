@@ -15,3 +15,5 @@ nestrs-core.workspace = true
 nestrs-http.workspace = true
 poem.workspace = true
 async-trait.workspace = true
+# Window-map lock — poison-free locking on the rate-limit hot path.
+parking_lot.workspace = true

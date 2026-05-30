@@ -74,6 +74,13 @@ futures-util = "0.3"
 # Async traits (needed for `dyn Trait` containing async methods on Rust 1.75)
 async-trait = "0.1"
 
+# Synchronisation primitives. parking_lot's locks have no poisoning, so the
+# framework's hot-path locks need no `.unwrap()`/`.expect()` (honouring the
+# "no unwrap on production paths" rule) and are smaller and faster than std's.
+# Already in the tree transitively (tokio/poem); pulled up as a direct dep so
+# every framework crate shares one lock primitive.
+parking_lot = "0.12"
+
 # GraphQL. `dataloader` gives us async-graphql's batching loader, surfaced via
 # the `#[dataloader]` decorator to kill field-resolver N+1s.
 async-graphql = { version = "7", features = ["dataloader"] }

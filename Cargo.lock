@@ -2665,6 +2665,7 @@ dependencies = [
  "async-trait",
  "inventory",
  "nestrs-macros",
+ "parking_lot",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
@@ -2679,6 +2680,7 @@ dependencies = [
  "async-trait",
  "nestrs-core",
  "nestrs-events-macros",
+ "parking_lot",
  "tokio",
  "tracing",
 ]
@@ -2921,6 +2923,7 @@ dependencies = [
  "nestrs-core",
  "nestrs-http",
  "nestrs-middleware",
+ "parking_lot",
  "poem",
 ]
 
@@ -2972,6 +2975,7 @@ dependencies = [
  "async-trait",
  "nestrs-core",
  "nestrs-http",
+ "parking_lot",
  "poem",
 ]
 
@@ -2985,6 +2989,7 @@ dependencies = [
  "nestrs-http",
  "nestrs-middleware",
  "nestrs-ws-macros",
+ "parking_lot",
  "poem",
  "serde",
  "serde_json",

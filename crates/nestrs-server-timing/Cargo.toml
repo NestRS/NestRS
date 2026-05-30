@@ -13,3 +13,5 @@ nestrs-http.workspace = true
 nestrs-middleware.workspace = true
 poem.workspace = true
 async-trait.workspace = true
+# Per-request entry accumulator lock — poison-free locking.
+parking_lot.workspace = true

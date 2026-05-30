@@ -1,5 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
+
+use parking_lot::Mutex;
 
 /// One Server-Timing entry: a metric name, an optional human-readable
 /// description (rendered as the W3C `desc` parameter), and a duration.
@@ -31,13 +33,7 @@ pub struct Timings {
 
 impl Timings {
     pub fn record(&self, name: impl Into<String>, dur: Duration) {
-        if let Ok(mut v) = self.inner.lock() {
-            v.push(Entry {
-                name: name.into(),
-                desc: None,
-                dur,
-            });
-        }
+        self.push(name, None, dur);
     }
 
     /// Use this when two entries share a metric name and need to be told
@@ -48,19 +44,18 @@ impl Timings {
         desc: impl Into<String>,
         dur: Duration,
     ) {
-        if let Ok(mut v) = self.inner.lock() {
-            v.push(Entry {
-                name: name.into(),
-                desc: Some(desc.into()),
-                dur,
-            });
-        }
+        self.push(name, Some(desc.into()), dur);
+    }
+
+    fn push(&self, name: impl Into<String>, desc: Option<String>, dur: Duration) {
+        self.inner.lock().push(Entry {
+            name: name.into(),
+            desc,
+            dur,
+        });
     }
 
     pub(crate) fn drain(&self) -> Vec<Entry> {
-        self.inner
-            .lock()
-            .map(|mut v| std::mem::take(&mut *v))
-            .unwrap_or_default()
+        std::mem::take(&mut *self.inner.lock())
     }
 }
