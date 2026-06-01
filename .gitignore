@@ -8,8 +8,8 @@
 /coverage
 lcov.info
 
-# Local environment / secrets
-.env
+# Local environment / secrets. The committed cascade (`.env`, `.env.<env>`) holds
+# only non-secret overrides; per-machine secrets go in `.local` files, never committed.
 .env.local
 .env.*.local
 
