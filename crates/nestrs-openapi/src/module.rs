@@ -35,28 +35,33 @@ const SPEC_PATH: &str = "/api-json";
 pub struct OpenApiModule;
 
 impl OpenApiModule {
-    /// Env-driven: load [`OpenApiConfig`] from `NESTRS_OPENAPI__*` (and the `.env`
-    /// cascade) through the config system.
-    pub fn for_root() -> OpenApiSetup {
-        OpenApiSetup
+    /// Configure the document. Pass `None` to load [`OpenApiConfig`] from
+    /// `NESTRS_OPENAPI__*` (the `.env` cascade), or an `OpenApiConfig` to pin it in
+    /// code (wins over the environment).
+    pub fn for_root(config: impl Into<Option<OpenApiConfig>>) -> OpenApiSetup {
+        OpenApiSetup {
+            pinned: config.into(),
+        }
     }
 }
 
-/// The configured form of [`OpenApiModule`]. Loads `OpenApiConfig` through the
-/// config system in **collect**, then installs the endpoint in **register** (after
-/// the factory phase, so the config is available).
-pub struct OpenApiSetup;
+/// The configured form of [`OpenApiModule`]. Resolves `OpenApiConfig` in
+/// **collect** (env, or the pinned value), then installs the endpoint in
+/// **register** (after the factory phase, so the config is available).
+pub struct OpenApiSetup {
+    pinned: Option<OpenApiConfig>,
+}
 
 impl DynamicModule for OpenApiSetup {
     fn collect(&self, builder: ContainerBuilder) -> ContainerBuilder {
-        ConfigModule::for_feature::<OpenApiConfig>().collect(builder)
+        ConfigModule::provide_feature(self.pinned.clone(), builder)
     }
 
     fn register(self, builder: ContainerBuilder) -> ContainerBuilder {
         let config = builder
             .snapshot()
             .get::<OpenApiConfig>()
-            .expect("OpenApiConfig is loaded by ConfigModule::for_feature");
+            .expect("OpenApiConfig is resolved by ConfigModule::provide_feature");
         register(builder, (*config).clone())
     }
 }

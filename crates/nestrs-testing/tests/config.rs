@@ -5,18 +5,27 @@
 
 use std::sync::Arc;
 
-use nestrs_config::{config, ConfigModule};
+use nestrs_config::{config, Config, ConfigModule, ConfigService};
 use nestrs_core::{injectable, module};
 use nestrs_testing::TestApp;
-use serde::Deserialize;
 use validator::Validate;
 
 #[config(namespace = "demoapp")]
-#[derive(Clone, Debug, Deserialize, Validate)]
+#[derive(Clone, Debug, Validate)]
 struct DemoConfig {
     url: String,
     #[validate(range(min = 1))]
     max_connections: u32,
+}
+
+impl Config for DemoConfig {
+    // The explicit NESTRS_DEMOAPP__* → field mapping the module owns.
+    fn from_env(env: &ConfigService) -> nestrs_config::Result<Self> {
+        Ok(Self {
+            url: env.get("URL").unwrap_or_default(),
+            max_connections: env.parse("MAX_CONNECTIONS")?.unwrap_or(10),
+        })
+    }
 }
 
 #[injectable]

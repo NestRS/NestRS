@@ -70,7 +70,7 @@ impl Processor for ProbeConsumer {
 }
 
 #[module(
-    imports = [QueueModule::for_root()],
+    imports = [QueueModule::for_root(QueueConfig { url: redis_url() })],
     providers = [ProbeConsumer],
 )]
 struct ProbeModule;
@@ -81,7 +81,6 @@ async fn enqueued_job_is_processed_through_real_redis() {
     let _ = PROBE_TX.set(tx);
 
     let app = TestApp::builder()
-        .provide(QueueConfig { url: redis_url() })
         .module::<ProbeModule>()
         .build_headless()
         .await

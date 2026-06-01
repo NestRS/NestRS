@@ -19,17 +19,27 @@ use crate::config::DatabaseConfig;
 pub struct DatabaseModule;
 
 impl DatabaseModule {
-    /// Env-driven: load [`DatabaseConfig`] from `NESTRS_DATABASE__*` (and the
-    /// `.env` cascade) through the config system, validate, connect.
-    pub fn for_root() -> DatabaseSetup {
-        DatabaseSetup
+    /// Configure the database. Pass `None` to load [`DatabaseConfig`] from
+    /// `NESTRS_DATABASE__*` (the `.env` cascade), or a `DatabaseConfig` to pin it
+    /// in code (wins over the environment — handy for tests):
+    ///
+    /// ```ignore
+    /// DatabaseModule::for_root(None)                                   // env-driven
+    /// DatabaseModule::for_root(DatabaseConfig { url, ..Default::default() }) // pinned
+    /// ```
+    pub fn for_root(config: impl Into<Option<DatabaseConfig>>) -> DatabaseSetup {
+        DatabaseSetup {
+            pinned: config.into(),
+        }
     }
 }
 
-/// The configured form of [`DatabaseModule`]. Loads its config through
-/// [`ConfigModule::for_feature`], then builds the pool and installs the request
-/// layers.
-pub struct DatabaseSetup;
+/// The configured form of [`DatabaseModule`]. Resolves its config through
+/// [`ConfigModule::provide_feature`] (env, or the pinned value), then builds the
+/// pool and installs the request layers.
+pub struct DatabaseSetup {
+    pinned: Option<DatabaseConfig>,
+}
 
 impl DynamicModule for DatabaseSetup {
     fn register(self, builder: ContainerBuilder) -> ContainerBuilder {
@@ -37,11 +47,11 @@ impl DynamicModule for DatabaseSetup {
     }
 
     fn collect(&self, builder: ContainerBuilder) -> ContainerBuilder {
-        let builder = ConfigModule::for_feature::<DatabaseConfig>().collect(builder);
+        let builder = ConfigModule::provide_feature(self.pinned.clone(), builder);
         builder.provide_factory::<DatabaseConnection, _, _>(|container| async move {
             let config = container
                 .get::<DatabaseConfig>()
-                .expect("DatabaseConfig is loaded by ConfigModule::for_feature");
+                .expect("DatabaseConfig is resolved by ConfigModule::provide_feature");
             connect(&config).await
         })
     }

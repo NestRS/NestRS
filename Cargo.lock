@@ -2657,7 +2657,6 @@ dependencies = [
  "figment",
  "nestrs-config-macros",
  "nestrs-core",
- "serde",
  "thiserror 2.0.18",
  "validator",
 ]

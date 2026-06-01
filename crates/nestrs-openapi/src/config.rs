@@ -1,16 +1,12 @@
-//! [`OpenApiConfig`] — the OpenAPI document `info` block, a namespaced
-//! `#[config]` loaded from `NESTRS_OPENAPI__*` (and the `.env` cascade). Every
-//! field has a default, so an app imports [`OpenApiModule`](crate::OpenApiModule)
-//! bare and sets its identity (`NESTRS_OPENAPI__TITLE`, `…__VERSION`,
-//! `…__DESCRIPTION`) in the `.env` cascade — no config literal in `app.rs`.
+//! [`OpenApiConfig`] — the OpenAPI document `info` block, a namespaced `#[config]`
+//! whose `from_env` maps `NESTRS_OPENAPI__*` to fields. An app sets its identity
+//! (`NESTRS_OPENAPI__TITLE`, `…__VERSION`, `…__DESCRIPTION`) in the `.env` cascade.
 
-use nestrs_config::config;
-use serde::{Deserialize, Serialize};
+use nestrs_config::{config, Config, ConfigService, Result};
 use validator::Validate;
 
 #[config(namespace = "openapi")]
-#[derive(Clone, Debug, Deserialize, Serialize, Validate)]
-#[serde(default)]
+#[derive(Clone, Debug, Validate)]
 pub struct OpenApiConfig {
     /// `info.title`.
     pub title: String,
@@ -27,5 +23,17 @@ impl Default for OpenApiConfig {
             version: "0.1.0".into(),
             description: None,
         }
+    }
+}
+
+impl Config for OpenApiConfig {
+    /// The explicit `NESTRS_OPENAPI__*` → field mapping.
+    fn from_env(env: &ConfigService) -> Result<Self> {
+        let d = Self::default();
+        Ok(Self {
+            title: env.get("TITLE").unwrap_or(d.title), //       NESTRS_OPENAPI__TITLE
+            version: env.get("VERSION").unwrap_or(d.version), // NESTRS_OPENAPI__VERSION
+            description: env.get("DESCRIPTION"), //              NESTRS_OPENAPI__DESCRIPTION (else None)
+        })
     }
 }

@@ -1,5 +1,6 @@
 //! `#[config]` implementation: parse the `namespace`, then emit the struct
-//! unchanged plus an `impl Config` carrying the namespace constant.
+//! unchanged plus an `impl Namespaced` carrying the namespace constant. The crate
+//! writes the `impl Config { fn from_env }` mapping itself.
 
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
@@ -22,7 +23,7 @@ pub(crate) fn config(args: TokenStream, input: TokenStream) -> TokenStream {
     quote! {
         #item
 
-        impl #impl_generics ::nestrs_config::Config for #name #ty_generics #where_clause {
+        impl #impl_generics ::nestrs_config::Namespaced for #name #ty_generics #where_clause {
             const NAMESPACE: &'static str = #namespace_lit;
         }
     }

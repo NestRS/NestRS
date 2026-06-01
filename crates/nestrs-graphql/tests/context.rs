@@ -50,7 +50,7 @@ impl TagResolver {
     }
 }
 
-#[module(imports = [GraphqlModule::for_root()], providers = [TagResolver])]
+#[module(imports = [GraphqlModule::for_root(None)], providers = [TagResolver])]
 struct GraphqlTestModule;
 
 #[tokio::test]

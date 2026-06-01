@@ -10,9 +10,8 @@ use crate::oauth::OAuthModule;
 #[module(
     imports = [
         ConfigModule::for_root(),
-        // Env-driven: the JWT key pair + OAuth provider come from NESTRS_AUTHN__*.
-        AuthnModule::for_root(),
-        OAuth2Module::for_root(),
+        AuthnModule::for_root(None),
+        OAuth2Module::for_root(None),
         ThrottlerModule::for_root(Throttle::per_minute(60)),
         OAuthModule,
         HealthModule,

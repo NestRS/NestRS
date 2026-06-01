@@ -5,19 +5,16 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 repository.workspace = true
-description = "Configuration loading for nestrs apps — the @nestjs/config analog (env + TOML via figment)."
+description = "Configuration loading for nestrs apps — the @nestjs/config analog (namespaced env mapping)."
 
 [dependencies]
-figment.workspace = true
-serde.workspace = true
 thiserror.workspace = true
-# `load_validated` runs declarative `#[validate(...)]` checks on a config struct
-# after loading — the same `validator` the HTTP `ValidationPipe` uses.
+# `Config::load` runs declarative `#[validate(...)]` checks after the explicit
+# `from_env` mapping — the same `validator` the HTTP `ValidationPipe` uses.
 validator.workspace = true
 # `ConfigModule::for_feature` queues a config-loading factory on the container,
 # so this crate reaches into the kernel. The reverse never holds — `nestrs-core`
-# does not depend on `nestrs-config`, so there is no cycle (and figment stays out
-# of the kernel, the reason this crate exists separately).
+# does not depend on `nestrs-config`, so there is no cycle.
 nestrs-core.workspace = true
 # `anyhow::Error` is the factory's error type (a failed load aborts the boot).
 anyhow.workspace = true
@@ -26,5 +23,5 @@ anyhow.workspace = true
 nestrs-config-macros.workspace = true
 
 [dev-dependencies]
-# Only the extra `test` feature for `figment::Jail`; `serde` is already a normal dep.
+# `figment::Jail` isolates the process env + cwd for the loader/cascade tests.
 figment = { workspace = true, features = ["test"] }
