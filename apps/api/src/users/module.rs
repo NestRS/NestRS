@@ -16,7 +16,6 @@ mod tests {
     use nestrs_core::{Container, Module};
     use std::sync::Arc;
 
-    // Non-secret sample EdDSA public key, test-only.
     const DEV_PUBLIC_KEY: &str = "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAHfPOjd2Y3m1BLM5nBJBMZFAlfWt69WL1NY8XyYeGfeo=\n-----END PUBLIC KEY-----\n";
 
     #[test]
