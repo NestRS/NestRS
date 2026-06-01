@@ -3,6 +3,7 @@
 	"dockerComposeFile": "docker-compose.yml",
 	"service": "dev",
 	"workspaceFolder": "/workspaces/nestrs",
+	"postCreateCommand": "cp -n .env.example .env.local || true",
 	"customizations": {
 		"vscode": {
 			"extensions": [
