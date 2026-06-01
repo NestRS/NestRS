@@ -1,33 +1,41 @@
 //! [`DatabaseConfig`] — the connection settings for [`DatabaseModule`], a
-//! namespaced `#[config]` loaded from `NESTRS_DATABASE__*` (and the `.env`
-//! cascade). The single, typed source of truth, loaded env-driven by
-//! `DatabaseModule::for_root()`.
+//! namespaced `#[config]` whose `from_env` maps `NESTRS_DATABASE__*` to fields
+//! explicitly. The single, typed source of truth: this file shows which variable
+//! feeds each field and the default when unset.
 
 use std::time::Duration;
 
-use nestrs_config::config;
+use nestrs_config::{config, Config, ConfigService, Result};
 use sea_orm::ConnectOptions;
-use serde::Deserialize;
 use validator::Validate;
 
 #[config(namespace = "database")]
-#[derive(Clone, Debug, Default, Deserialize, Validate)]
+#[derive(Clone, Debug, Default, Validate)]
 pub struct DatabaseConfig {
-    /// The database URL, e.g. `postgres://user:pass@host/db`
-    /// (`NESTRS_DATABASE__URL`). Empty aborts the build with a clear message.
-    #[serde(default)]
+    /// The database URL, e.g. `postgres://user:pass@host/db`. Empty aborts the
+    /// build with a clear message.
     pub url: String,
-    /// Maximum pooled connections (`NESTRS_DATABASE__MAX_CONNECTIONS`; SeaORM
-    /// default when unset).
+    /// Maximum pooled connections (SeaORM default when unset).
     pub max_connections: Option<u32>,
-    /// Minimum idle connections (`NESTRS_DATABASE__MIN_CONNECTIONS`).
+    /// Minimum idle connections.
     pub min_connections: Option<u32>,
-    /// Connection-acquire timeout in whole seconds
-    /// (`NESTRS_DATABASE__CONNECT_TIMEOUT_SECS`).
+    /// Connection-acquire timeout in whole seconds.
     pub connect_timeout_secs: Option<u64>,
-    /// Log SQL via SeaORM's `sqlx` logging (`NESTRS_DATABASE__SQLX_LOGGING`).
-    #[serde(default)]
+    /// Log SQL via SeaORM's `sqlx` logging.
     pub sqlx_logging: bool,
+}
+
+impl Config for DatabaseConfig {
+    /// The explicit `NESTRS_DATABASE__*` → field mapping.
+    fn from_env(env: &ConfigService) -> Result<Self> {
+        Ok(Self {
+            url: env.get("URL").unwrap_or_default(), //                NESTRS_DATABASE__URL
+            max_connections: env.parse("MAX_CONNECTIONS")?, //         NESTRS_DATABASE__MAX_CONNECTIONS
+            min_connections: env.parse("MIN_CONNECTIONS")?, //         NESTRS_DATABASE__MIN_CONNECTIONS
+            connect_timeout_secs: env.parse("CONNECT_TIMEOUT_SECS")?, //NESTRS_DATABASE__CONNECT_TIMEOUT_SECS
+            sqlx_logging: env.flag("SQLX_LOGGING", false)?, //         NESTRS_DATABASE__SQLX_LOGGING (else false)
+        })
+    }
 }
 
 impl DatabaseConfig {

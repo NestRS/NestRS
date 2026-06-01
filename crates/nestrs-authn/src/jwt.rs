@@ -11,8 +11,8 @@ use jsonwebtoken::{
     decode, encode, errors::ErrorKind, get_current_timestamp, Algorithm, DecodingKey, EncodingKey,
     Header, Validation,
 };
-use nestrs_config::config;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use nestrs_config::{config, Config, ConfigService};
+use serde::{de::DeserializeOwned, Serialize};
 use validator::Validate;
 
 use crate::error::AuthError;
@@ -98,8 +98,7 @@ impl JwtOptions {
 /// committed `.env`; production sets a real key via the real environment.
 // No `Debug`: `secret` / `private_key` are secrets and must not leak via a derived format.
 #[config(namespace = "authn")]
-#[derive(Clone, Default, Deserialize, Validate)]
-#[serde(default)]
+#[derive(Clone, Default, Validate)]
 pub struct JwtConfig {
     /// HMAC shared secret (`NESTRS_AUTHN__SECRET`) — symmetric `HS256`.
     pub secret: Option<String>,
@@ -109,6 +108,18 @@ pub struct JwtConfig {
     /// EdDSA public key PEM (`NESTRS_AUTHN__PUBLIC_KEY`) — present on anyone who
     /// verifies.
     pub public_key: Option<String>,
+}
+
+impl Config for JwtConfig {
+    /// The explicit `NESTRS_AUTHN__*` → field mapping. All optional; the present
+    /// combination decides the mode (see [`into_options`](Self::into_options)).
+    fn from_env(env: &ConfigService) -> nestrs_config::Result<Self> {
+        Ok(Self {
+            secret: env.get("SECRET"),           // NESTRS_AUTHN__SECRET
+            private_key: env.get("PRIVATE_KEY"), // NESTRS_AUTHN__PRIVATE_KEY
+            public_key: env.get("PUBLIC_KEY"),   // NESTRS_AUTHN__PUBLIC_KEY
+        })
+    }
 }
 
 impl JwtConfig {

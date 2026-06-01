@@ -1,27 +1,32 @@
 //! [`QueueConfig`] — the Redis connection settings for [`QueueModule`], a
-//! namespaced `#[config]` loaded from `NESTRS_QUEUE__*` (and the `.env` cascade).
+//! namespaced `#[config]` whose `from_env` maps `NESTRS_QUEUE__*` to fields.
 
-use nestrs_config::config;
-use serde::Deserialize;
+use nestrs_config::{config, Config, ConfigService, Result};
 use validator::Validate;
 
 const DEFAULT_URL: &str = "redis://127.0.0.1/";
 
-fn default_url() -> String {
-    DEFAULT_URL.to_string()
-}
-
 #[config(namespace = "queue")]
-#[derive(Clone, Debug, Deserialize, Validate)]
+#[derive(Clone, Debug, Validate)]
 pub struct QueueConfig {
-    /// The Redis URL backing the queues (`NESTRS_QUEUE__URL`). Defaults to a
-    /// local Redis when unset.
-    #[serde(default = "default_url")]
+    /// The Redis URL backing the queues. Defaults to a local Redis when unset.
     pub url: String,
 }
 
 impl Default for QueueConfig {
     fn default() -> Self {
-        Self { url: default_url() }
+        Self {
+            url: DEFAULT_URL.to_string(),
+        }
+    }
+}
+
+impl Config for QueueConfig {
+    /// The explicit `NESTRS_QUEUE__*` → field mapping.
+    fn from_env(env: &ConfigService) -> Result<Self> {
+        Ok(Self {
+            // NESTRS_QUEUE__URL, else the local-Redis default.
+            url: env.get("URL").unwrap_or_else(|| DEFAULT_URL.to_string()),
+        })
     }
 }

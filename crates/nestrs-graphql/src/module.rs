@@ -33,28 +33,33 @@ use crate::resolver::build_schema;
 pub struct GraphqlModule;
 
 impl GraphqlModule {
-    /// Env-driven: load [`GraphqlConfig`] from `NESTRS_GRAPHQL__*` (and the `.env`
-    /// cascade) through the config system.
-    pub fn for_root() -> GraphqlSetup {
-        GraphqlSetup
+    /// Configure the endpoint. Pass `None` to load [`GraphqlConfig`] from
+    /// `NESTRS_GRAPHQL__*` (the `.env` cascade), or a `GraphqlConfig` to pin it in
+    /// code (wins over the environment).
+    pub fn for_root(config: impl Into<Option<GraphqlConfig>>) -> GraphqlSetup {
+        GraphqlSetup {
+            pinned: config.into(),
+        }
     }
 }
 
-/// The configured form of [`GraphqlModule`]. Loads `GraphqlConfig` through the
-/// config system in the **collect** phase, then mounts the endpoint in **register**
-/// (which runs after the factory phase, so the config is available).
-pub struct GraphqlSetup;
+/// The configured form of [`GraphqlModule`]. Resolves `GraphqlConfig` in the
+/// **collect** phase (env, or the pinned value), then mounts the endpoint in
+/// **register** (which runs after the factory phase, so the config is available).
+pub struct GraphqlSetup {
+    pinned: Option<GraphqlConfig>,
+}
 
 impl DynamicModule for GraphqlSetup {
     fn collect(&self, builder: ContainerBuilder) -> ContainerBuilder {
-        ConfigModule::for_feature::<GraphqlConfig>().collect(builder)
+        ConfigModule::provide_feature(self.pinned.clone(), builder)
     }
 
     fn register(self, builder: ContainerBuilder) -> ContainerBuilder {
         let config = builder
             .snapshot()
             .get::<GraphqlConfig>()
-            .expect("GraphqlConfig is loaded by ConfigModule::for_feature");
+            .expect("GraphqlConfig is resolved by ConfigModule::provide_feature");
         register(builder, (*config).clone())
     }
 }

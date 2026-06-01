@@ -13,7 +13,7 @@
 //! as a cookie on the redirect, hand it back on the callback. Tamper-proof, and
 //! no new storage.
 
-use nestrs_config::config;
+use nestrs_config::{config, Config, ConfigService};
 use oauth2::basic::BasicClient;
 use oauth2::{
     AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
@@ -34,8 +34,7 @@ use crate::jwt::JwtService;
 /// with `..Default::default()`.
 // No `Debug`: `client_secret` is a secret and must not leak through a derived format.
 #[config(namespace = "authn")]
-#[derive(Clone, Default, Deserialize, Validate)]
-#[serde(default)]
+#[derive(Clone, Default, Validate)]
 pub struct OAuth2Config {
     pub client_id: String,
     pub client_secret: String,
@@ -50,6 +49,22 @@ pub struct OAuth2Config {
     pub userinfo_url: String,
     /// Scopes to request.
     pub scopes: Vec<String>,
+}
+
+impl Config for OAuth2Config {
+    /// The explicit `NESTRS_AUTHN__*` → field mapping (OAuth lives in the `authn`
+    /// domain). Scopes are a comma-separated list (`read:user,repo`).
+    fn from_env(env: &ConfigService) -> nestrs_config::Result<Self> {
+        Ok(Self {
+            client_id: env.get("CLIENT_ID").unwrap_or_default(), //         NESTRS_AUTHN__CLIENT_ID
+            client_secret: env.get("CLIENT_SECRET").unwrap_or_default(), // NESTRS_AUTHN__CLIENT_SECRET
+            auth_url: env.get("AUTH_URL").unwrap_or_default(), //           NESTRS_AUTHN__AUTH_URL
+            token_url: env.get("TOKEN_URL").unwrap_or_default(), //         NESTRS_AUTHN__TOKEN_URL
+            redirect_url: env.get("REDIRECT_URL").unwrap_or_default(), //   NESTRS_AUTHN__REDIRECT_URL
+            userinfo_url: env.get("USERINFO_URL").unwrap_or_default(), //   NESTRS_AUTHN__USERINFO_URL
+            scopes: env.list("SCOPES"), //                                 NESTRS_AUTHN__SCOPES (csv)
+        })
+    }
 }
 
 /// The redirect leg of the flow, produced by [`OAuth2Client::authorize`].

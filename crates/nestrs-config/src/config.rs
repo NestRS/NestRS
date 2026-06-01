@@ -2,11 +2,11 @@
 //! `ConfigModule.forFeature` trio, collapsed to the leverage Rust's type system
 //! gives us: **the type is the token**.
 //!
-//! A `#[config(namespace = "database")]` struct (see the [`config`] macro)
-//! implements [`Config`], so it loads itself from `NESTRS_DATABASE__*` and
-//! validates on load. Importing [`ConfigModule::for_feature::<DatabaseConfig>()`]
-//! in a module loads it once at boot and registers `Arc<DatabaseConfig>`, which
-//! any provider in the app then injects directly:
+//! A `#[config(namespace = "database")]` struct supplies its namespace (via
+//! [`Namespaced`]); the crate writes an `impl Config { fn from_env }` mapping each
+//! `NESTRS_DATABASE__*` variable to a field. [`ConfigModule::for_feature::<DatabaseConfig>()`]
+//! loads it once at boot and registers `Arc<DatabaseConfig>`, which any provider
+//! then injects directly:
 //!
 //! ```ignore
 //! #[module(imports = [ConfigModule::for_feature::<DatabaseConfig>()])]
@@ -21,29 +21,61 @@
 use std::marker::PhantomData;
 
 use nestrs_core::{ContainerBuilder, DynamicModule};
-use serde::de::DeserializeOwned;
 use validator::Validate;
 
 use crate::environment::Environment;
-use crate::loader::load_namespaced;
+use crate::loader::ConfigService;
 use crate::Result;
 
-/// A namespaced configuration type. Implemented by the [`config`](crate::config)
-/// macro, which supplies [`NAMESPACE`](Self::NAMESPACE); the default
-/// [`load`](Self::load) reads `NESTRS_<NAMESPACE>__*` and validates. A framework
-/// crate that needs a non-standard source (e.g. honouring the well-known
-/// `DATABASE_URL` alongside the namespace) overrides `load`.
-pub trait Config: DeserializeOwned + Validate + Send + Sync + Sized + 'static {
-    /// The env-domain segment for this config: the `<DOMAIN>` in
-    /// `NESTRS_<DOMAIN>__<KEY>`. Set by `#[config(namespace = "…")]`.
+/// The env-domain segment of a config — the `<DOMAIN>` in `NESTRS_<DOMAIN>__<KEY>`.
+/// Supplied by the [`config`](crate::config) macro from `#[config(namespace = "…")]`,
+/// so the namespace is declared once, on the struct. A supertrait of [`Config`].
+pub trait Namespaced {
+    /// The namespace, e.g. `"database"` → the `NESTRS_DATABASE__` prefix.
     const NAMESPACE: &'static str;
+}
 
-    /// Load and validate this config from the environment. The default reads the
-    /// namespace prefix via [`load_namespaced`](crate::load_namespaced); a bad
-    /// value or a violated `#[validate(...)]` rule returns an error that aborts
-    /// the boot.
+/// A namespaced configuration type — the typed source of truth for one concern.
+///
+/// The [`config`](crate::config) macro supplies the namespace (via
+/// [`Namespaced`]); the crate writes [`from_env`](Self::from_env) — the
+/// **explicit** mapping from `NESTRS_<NAMESPACE>__<KEY>` variables to fields,
+/// field-by-field, defaults and all. That mapping is the single place to look:
+/// opening a `config.rs` shows exactly which variable feeds which field and what
+/// the value is when unset. `ConfigModule` owns the *resolution* (the `.env`
+/// cascade, the namespaced reader); the module owns the *mapping* (`from_env`).
+///
+/// ```ignore
+/// #[config(namespace = "database")]
+/// #[derive(Clone, Debug, Default, Validate)]
+/// pub struct DatabaseConfig { pub url: String, pub max_connections: Option<u32> }
+///
+/// impl Config for DatabaseConfig {
+///     fn from_env(env: &ConfigService) -> Result<Self> {
+///         Ok(Self {
+///             url: env.get("URL").unwrap_or_default(),       // NESTRS_DATABASE__URL
+///             max_connections: env.parse("MAX_CONNECTIONS")?, // … else None
+///         })
+///     }
+/// }
+/// ```
+pub trait Config: Namespaced + Validate + Clone + Send + Sync + Sized + 'static {
+    /// Map this config from the environment, explicitly. Read each field from its
+    /// `NESTRS_<NAMESPACE>__<KEY>` variable via [`ConfigService`] (`env.get`,
+    /// `env.parse`, `env.flag`, `env.list`), falling back to the field's default
+    /// when unset. A variable that is set but unparseable returns `Err` (naming
+    /// the variable) and aborts the boot — never a silent fallback.
+    fn from_env(env: &ConfigService) -> Result<Self>;
+
+    /// Resolve and validate from the environment: build the namespaced
+    /// [`ConfigService`] (which ensures the `.env` cascade is loaded), run
+    /// [`from_env`](Self::from_env), then the declarative `#[validate(...)]` rules.
+    /// A bad value or a violated rule aborts the boot.
     fn load() -> Result<Self> {
-        load_namespaced(Self::NAMESPACE)
+        let env = ConfigService::for_namespace(Self::NAMESPACE);
+        let config = Self::from_env(&env)?;
+        config.validate()?;
+        Ok(config)
     }
 }
 
@@ -89,6 +121,21 @@ impl ConfigModule {
     pub fn for_feature<C: Config>() -> ConfigFeature<C> {
         ConfigFeature(PhantomData)
     }
+
+    /// Wire a configurable module's `C` into `builder`, honouring an optional pin:
+    /// `None` loads `C` from the environment (the [`for_feature`](Self::for_feature)
+    /// path); `Some(cfg)` **provides `cfg` directly** so it wins over the
+    /// environment (the value an app passes to `Module::for_root(config)`). The
+    /// single helper every configurable module's `for_root` routes through.
+    pub fn provide_feature<C: Config>(
+        pinned: Option<C>,
+        builder: ContainerBuilder,
+    ) -> ContainerBuilder {
+        match pinned {
+            None => Self::for_feature::<C>().collect(builder),
+            Some(config) => builder.provide(config),
+        }
+    }
 }
 
 /// The configured form of [`ConfigModule`] for one [`Config`] type, produced by
@@ -100,37 +147,13 @@ impl<C: Config> DynamicModule for ConfigFeature<C> {
     // Loading is synchronous, but it is fallible, and `register` cannot return an
     // error — so the load is wrapped in a factory queued here and awaited by the
     // build, where a returned `Err` aborts the boot. (The same path the database
-    // pool takes; config is one more piece of shared infrastructure.)
+    // pool takes; config is one more piece of shared infrastructure.) The error
+    // already names the offending variable (`ConfigError::Parse`) or the broken
+    // rule, so it surfaces the misconfiguration directly.
     fn collect(&self, builder: ContainerBuilder) -> ContainerBuilder {
-        builder.provide_factory::<C, _, _>(|_| async move {
-            C::load().map_err(|e| {
-                anyhow::anyhow!(
-                    "invalid NESTRS_{}__* configuration: {e}",
-                    C::NAMESPACE.to_ascii_uppercase()
-                )
-            })
-        })
+        builder
+            .provide_factory::<C, _, _>(|_| async move { C::load().map_err(anyhow::Error::from) })
     }
-}
-
-/// Resolve the [`Environment`] and load the `.env` cascade **immediately**, at
-/// the top of `main` — before anything that reads the environment outside the
-/// DI graph (notably `Telemetry::init`, which runs before the app is built).
-/// Returns the active environment. Idempotent with
-/// [`ConfigModule::for_root`]: both fill only unset variables, so calling both is
-/// harmless. An app with no pre-build env readers can rely on `for_root` alone.
-///
-/// ```ignore
-/// #[tokio::main]
-/// async fn main() -> anyhow::Result<()> {
-///     let _env = nestrs_config::bootstrap_env();      // load .env first
-///     let _t = nestrs_telemetry::Telemetry::init("api")?;  // now sees it
-///     App::builder().module::<AppModule>()/* ... */.build().await?.run().await
-/// }
-/// ```
-pub fn bootstrap_env() -> Environment {
-    crate::dotenv::ensure_env_loaded();
-    Environment::from_env()
 }
 
 /// The configured form of [`ConfigModule::for_root`]. A [`DynamicModule`] that
@@ -147,27 +170,36 @@ impl DynamicModule for ConfigRoot {
 }
 
 #[cfg(test)]
+// `figment::Jail`'s closure returns figment's large `Result` — a fixed signature
+// we cannot change, so the lint is unactionable on these tests.
+#[allow(clippy::result_large_err)]
 mod tests {
     use super::*;
     use crate::ConfigError;
-    use serde::Deserialize;
 
     // A hand-written `impl Config` rather than the `#[config]` macro: the macro
     // emits `::nestrs_config::Config`, which a crate cannot resolve against
     // itself. The end-to-end macro + DI wiring is covered in `nestrs-testing`.
-    #[derive(Debug, Deserialize, Validate, PartialEq)]
+    #[derive(Clone, Validate, PartialEq, Debug)]
     struct DbCfg {
         url: String,
         #[validate(range(min = 1))]
         max_connections: u32,
     }
-    impl Config for DbCfg {
+    impl Namespaced for DbCfg {
         const NAMESPACE: &'static str = "testdb";
+    }
+    impl Config for DbCfg {
+        fn from_env(env: &ConfigService) -> Result<Self> {
+            Ok(Self {
+                url: env.get("URL").unwrap_or_default(),
+                max_connections: env.parse("MAX_CONNECTIONS")?.unwrap_or(10),
+            })
+        }
     }
 
     #[test]
-    #[allow(clippy::result_large_err)]
-    fn load_reads_the_namespace_prefix() {
+    fn load_maps_each_field_from_its_variable() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("NESTRS_TESTDB__URL", "postgres://localhost/app");
             jail.set_env("NESTRS_TESTDB__MAX_CONNECTIONS", "5");
@@ -184,10 +216,19 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::result_large_err)]
-    fn load_validates_on_the_way_in() {
+    fn load_falls_back_to_defaults_when_unset() {
         figment::Jail::expect_with(|jail| {
             jail.set_env("NESTRS_TESTDB__URL", "postgres://localhost/app");
+            // MAX_CONNECTIONS unset → the in-mapping default (10).
+            let cfg = DbCfg::load().expect("config loads with defaults");
+            assert_eq!(cfg.max_connections, 10);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn load_validates_on_the_way_in() {
+        figment::Jail::expect_with(|jail| {
             jail.set_env("NESTRS_TESTDB__MAX_CONNECTIONS", "0");
             let err = DbCfg::load().expect_err("max_connections = 0 violates min = 1");
             assert!(matches!(err, ConfigError::Validation(_)));
@@ -196,14 +237,13 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::result_large_err)]
-    fn load_does_not_read_a_sibling_namespace() {
-        // A key under a different domain must not leak into this config.
+    fn load_fails_loudly_on_an_unparseable_value() {
         figment::Jail::expect_with(|jail| {
-            jail.set_env("NESTRS_OTHER__URL", "postgres://wrong");
-            jail.set_env("NESTRS_TESTDB__MAX_CONNECTIONS", "3");
-            let err = DbCfg::load().expect_err("url is unset under the testdb namespace");
-            assert!(matches!(err, ConfigError::Source(_)));
+            jail.set_env("NESTRS_TESTDB__MAX_CONNECTIONS", "lots");
+            let err = DbCfg::load().expect_err("non-numeric must abort the boot");
+            assert!(
+                matches!(err, ConfigError::Parse { ref var, .. } if var == "NESTRS_TESTDB__MAX_CONNECTIONS")
+            );
             Ok(())
         });
     }

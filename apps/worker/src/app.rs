@@ -6,7 +6,7 @@ use crate::audio::AudioModule;
 
 #[module(imports = [
     ConfigModule::for_root(),
-    QueueModule::for_root(),
+    QueueModule::for_root(None),
     AudioModule,
 ])]
 pub struct AppModule;

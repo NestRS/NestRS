@@ -24,9 +24,9 @@ use crate::environment::Environment;
 
 /// Load the `.env` cascade **once per process**, from the working directory, for
 /// the active [`Environment`]. The single choke point every config read routes
-/// through (`load_namespaced` / `load` call it, as do `ConfigModule::for_root` and
-/// `bootstrap_env`), so the cascade is loaded even if an app forgets to wire any
-/// of them — and never loaded twice. Real env vars still win (set-if-absent).
+/// through (`Config::load` via `ConfigService`, `ConfigModule::for_root`, and
+/// `Environment::init`), so the cascade is loaded even if an app forgets to wire
+/// any of them — and never loaded twice. Real env vars still win (set-if-absent).
 pub(crate) fn ensure_env_loaded() {
     static LOADED: Once = Once::new();
     LOADED.call_once(|| {

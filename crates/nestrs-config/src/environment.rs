@@ -25,6 +25,29 @@ pub enum Environment {
 }
 
 impl Environment {
+    /// Initialize the environment system at the **top of `main`**, before anything
+    /// that reads the environment outside the DI graph (notably
+    /// [`Telemetry::init`](nestrs_telemetry::Telemetry::init), which runs before the
+    /// app is built): ensure the `.env` cascade is loaded (idempotent) and return
+    /// the active environment. The symmetric companion of `Telemetry::init`.
+    ///
+    /// ```ignore
+    /// #[tokio::main]
+    /// async fn main() -> anyhow::Result<()> {
+    ///     let _environment = Environment::init();          // load .env first
+    ///     let _telemetry = Telemetry::init("api")?;        // now sees it
+    ///     App::builder().module::<AppModule>()/* … */.build().await?.run().await
+    /// }
+    /// ```
+    ///
+    /// Idempotent with [`ConfigModule::for_root`](crate::ConfigModule::for_root):
+    /// both ensure the cascade once, so an app that uses the DI module alone (no
+    /// pre-build env readers) can skip this.
+    pub fn init() -> Self {
+        crate::dotenv::ensure_env_loaded();
+        Self::from_env()
+    }
+
     /// Read `NESTRS_ENV` from the real process environment. Accepts the long or
     /// short spellings (`production`/`prod`, `development`/`dev`); anything
     /// unrecognised falls back to [`Development`](Self::Development).

@@ -30,9 +30,6 @@ async fn boot() -> (EphemeralDatabase, TestApp) {
         .module::<AppModule>()
         .with_test_telemetry()
         .provide_arc(db.connection())
-        // Seed the resource server's verify key (the dev public key) so the boot
-        // needs no `NESTRS_AUTHN__PUBLIC_KEY` in the environment — seed wins over
-        // the env-reading factory.
         .provide(JwtConfig {
             public_key: Some(DEV_PUBLIC_KEY.into()),
             ..Default::default()

@@ -15,8 +15,6 @@ async fn boot() -> TestApp {
     TestApp::builder()
         .module::<AppModule>()
         .with_test_telemetry()
-        // Seed the signing config + OAuth provider so the boot needs no
-        // `NESTRS_AUTHN__*` in the environment (seed wins over the env factory).
         .provide(JwtConfig {
             private_key: Some(DEV_PRIVATE_KEY.into()),
             public_key: Some(DEV_PUBLIC_KEY.into()),
