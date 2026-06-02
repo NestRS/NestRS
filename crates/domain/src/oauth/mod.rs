@@ -16,8 +16,5 @@ pub use dto::LoginInput;
 pub use error::TokenError;
 pub use module::OAuthModule;
 pub use scope::{role_from_db, roles_for_scope};
-pub use service::{AccessToken, TokenIssuer};
-pub use strategy::{
-    AuthenticatedClient, Caller, ClientAuthGuard, ClientCredentialsStrategy, OAuthGuard,
-    OAuthStrategy,
-};
+pub use service::{AccessToken, AuthenticatedClient, Caller, OAuthFlow, TokenIssuer};
+pub use strategy::{ClientAuthGuard, ClientCredentialsStrategy, OAuthGuard, OAuthStrategy};

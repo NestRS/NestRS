@@ -1,16 +1,70 @@
 use std::sync::Arc;
 
-use nestrs_authn::JwtService;
+use nestrs_authn::{AuthError, Authorization, JwtService, OAuth2Client};
 use nestrs_core::injectable;
 use schemars::JsonSchema;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::oauth::config::IssuerConfig;
 use crate::oauth::error::TokenError;
 use crate::oauth::scope::{role_from_db, roles_for_scope};
-use crate::oauth::strategy::AuthenticatedClient;
 use crate::users::UsersService;
 use crate::{Claims, Role};
+
+/// The principal an OAuth Authorization Code login resolves to — the same shape
+/// `Strategy::authenticate` returns, attached to the request so a downstream
+/// handler can read it back.
+#[derive(Debug, Clone)]
+pub struct Caller {
+    pub user_id: Uuid,
+    pub org_id: Uuid,
+    pub roles: Vec<Role>,
+}
+
+/// A machine principal authenticated through a `client_credentials` grant —
+/// the same shape `Strategy::authenticate` returns for the client-credentials
+/// strategy, attached to the request for the controller to read back.
+#[derive(Debug, Clone)]
+pub struct AuthenticatedClient {
+    pub org_id: Uuid,
+    pub scopes: Vec<String>,
+}
+
+/// Subset of an OAuth provider's `userinfo` we consume. `id` is the only field
+/// providers always return; the rest is best-effort and falls back to derived
+/// values so a missing email or display name does not block account creation.
+#[derive(Debug, Clone, Deserialize)]
+struct OAuthProfile {
+    id: i64,
+    #[serde(default)]
+    login: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    email: Option<String>,
+}
+
+impl OAuthProfile {
+    fn email(&self) -> String {
+        self.email
+            .clone()
+            .filter(|email| !email.is_empty())
+            .unwrap_or_else(|| format!("{}@users.noreply.github.com", self.handle()))
+    }
+
+    fn handle(&self) -> String {
+        self.login.clone().unwrap_or_else(|| self.id.to_string())
+    }
+
+    fn display_name(&self) -> String {
+        self.name
+            .clone()
+            .filter(|name| !name.is_empty())
+            .or_else(|| self.login.clone())
+            .unwrap_or_else(|| format!("user-{}", self.id))
+    }
+}
 
 #[injectable]
 pub struct TokenIssuer {
@@ -91,4 +145,110 @@ impl TokenIssuer {
         let roles = roles_for_scope(scope, &client.scopes).ok_or(TokenError::InvalidScope)?;
         self.issue(None, client.org_id, roles)
     }
+}
+
+/// Grant-resolution for OAuth flows — the business core the [`Strategy`]
+/// adapters delegate to. Each method takes already-parsed inputs (the HTTP
+/// glue lives in `strategy.rs`) and returns a typed principal or an
+/// [`AuthError`], keeping the strategies thin and the policy testable
+/// without booting Poem.
+///
+/// [`Strategy`]: nestrs_authn::Strategy
+#[injectable]
+pub struct OAuthFlow {
+    #[inject]
+    jwt: Arc<JwtService>,
+    #[inject]
+    oauth: Arc<OAuth2Client>,
+    #[inject]
+    users: Arc<UsersService>,
+    #[inject]
+    config: Arc<IssuerConfig>,
+}
+
+impl OAuthFlow {
+    /// Construct with already-resolved dependencies (container or tests).
+    pub fn new(
+        jwt: Arc<JwtService>,
+        oauth: Arc<OAuth2Client>,
+        users: Arc<UsersService>,
+        config: Arc<IssuerConfig>,
+    ) -> Self {
+        Self {
+            jwt,
+            oauth,
+            users,
+            config,
+        }
+    }
+
+    /// Begin the Authorization Code flow: return the provider redirect URL and
+    /// the opaque transaction value the caller will round-trip via cookie.
+    pub fn authorize(&self) -> Result<Authorization, AuthError> {
+        self.oauth.authorize(&self.jwt)
+    }
+
+    /// Complete the Authorization Code flow: exchange the code for an access
+    /// token, fetch the user profile, find-or-create the local account, and
+    /// return the resolved [`Caller`].
+    pub async fn resolve_caller(
+        &self,
+        transaction: &str,
+        state: &str,
+        code: &str,
+    ) -> Result<Caller, AuthError> {
+        let access_token = self
+            .oauth
+            .exchange(&self.jwt, transaction, state, code)
+            .await?;
+        let profile: OAuthProfile = self.oauth.userinfo(&access_token).await?;
+        let user = self
+            .users
+            .find_or_create(
+                &profile.email(),
+                &profile.display_name(),
+                self.config.default_org_id,
+            )
+            .await
+            .map_err(|err| AuthError::Failed(format!("identity resolution failed: {err}")))?;
+        Ok(Caller {
+            user_id: user.id,
+            org_id: user.org_id,
+            roles: vec![role_from_db(&user.role)],
+        })
+    }
+
+    /// Validate a `client_credentials` Basic-auth pair against the configured
+    /// registry, in constant time. Returns the matching client's grant scopes
+    /// + org binding when valid.
+    pub fn authenticate_client(
+        &self,
+        client_id: &str,
+        client_secret: &str,
+    ) -> Result<AuthenticatedClient, AuthError> {
+        let client = self
+            .config
+            .clients
+            .iter()
+            .find(|client| {
+                constant_time_eq(client.client_id.as_bytes(), client_id.as_bytes())
+                    && constant_time_eq(client.client_secret.as_bytes(), client_secret.as_bytes())
+            })
+            .ok_or_else(|| AuthError::Failed("invalid client credentials".into()))?;
+        Ok(AuthenticatedClient {
+            org_id: client.org_id,
+            scopes: client.scopes.clone(),
+        })
+    }
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
