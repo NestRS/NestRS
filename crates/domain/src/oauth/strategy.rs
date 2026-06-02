@@ -1,37 +1,22 @@
 //! OAuth [`Strategy`] implementations and guard aliases (`AuthGuard<S>`).
 //!
-//! HTTP redirects/cookies here are required by `nestrs_authn::Strategy` (Poem request).
-//! Token signing and grant policy live in [`super::service::TokenIssuer`].
+//! These are **thin HTTP adapters** over [`OAuthFlow`]: they read a poem
+//! request, hand the parsed inputs to the service, and wrap the typed result
+//! in an [`Outcome`]. All grant logic — code exchange, profile resolution,
+//! find-or-create, client credential checks — lives in
+//! [`super::service::OAuthFlow`], so this file is reachable as pure HTTP
+//! plumbing.
 
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use nestrs_authn::{
-    basic_credentials, AuthError, JwtService, OAuth2Client, Outcome, Strategy,
-};
+use nestrs_authn::{basic_credentials, AuthError, Outcome, Strategy};
 use nestrs_core::injectable;
 use poem::http::{header, StatusCode};
 use poem::{Request, Response};
 use serde::Deserialize;
-use uuid::Uuid;
 
-use crate::oauth::config::IssuerConfig;
-use crate::oauth::scope::role_from_db;
-use crate::users::UsersService;
-use crate::Role;
-
-#[derive(Debug, Clone)]
-pub struct Caller {
-    pub user_id: Uuid,
-    pub org_id: Uuid,
-    pub roles: Vec<Role>,
-}
-
-#[derive(Debug, Clone)]
-pub struct AuthenticatedClient {
-    pub org_id: Uuid,
-    pub scopes: Vec<String>,
-}
+use crate::oauth::service::{AuthenticatedClient, Caller, OAuthFlow};
 
 pub type OAuthGuard = nestrs_authn::AuthGuard<OAuthStrategy>;
 pub type ClientAuthGuard = nestrs_authn::AuthGuard<ClientCredentialsStrategy>;
@@ -44,48 +29,10 @@ struct CallbackQuery {
     state: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct OAuthProfile {
-    id: i64,
-    #[serde(default)]
-    login: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
-    #[serde(default)]
-    email: Option<String>,
-}
-
-impl OAuthProfile {
-    fn email(&self) -> String {
-        self.email
-            .clone()
-            .filter(|email| !email.is_empty())
-            .unwrap_or_else(|| format!("{}@users.noreply.github.com", self.handle()))
-    }
-
-    fn handle(&self) -> String {
-        self.login.clone().unwrap_or_else(|| self.id.to_string())
-    }
-
-    fn display_name(&self) -> String {
-        self.name
-            .clone()
-            .filter(|name| !name.is_empty())
-            .or_else(|| self.login.clone())
-            .unwrap_or_else(|| format!("user-{}", self.id))
-    }
-}
-
 #[injectable]
 pub struct OAuthStrategy {
     #[inject]
-    jwt: Arc<JwtService>,
-    #[inject]
-    oauth: Arc<OAuth2Client>,
-    #[inject]
-    users: Arc<UsersService>,
-    #[inject]
-    config: Arc<IssuerConfig>,
+    flow: Arc<OAuthFlow>,
 }
 
 #[async_trait]
@@ -96,7 +43,7 @@ impl Strategy for OAuthStrategy {
         let query: CallbackQuery = req.params().unwrap_or_default();
 
         let Some(code) = query.code else {
-            let authorization = self.oauth.authorize(&self.jwt)?;
+            let authorization = self.flow.authorize()?;
             let redirect = Response::builder()
                 .status(StatusCode::FOUND)
                 .header(header::LOCATION, authorization.url)
@@ -116,29 +63,15 @@ impl Strategy for OAuthStrategy {
             .ok_or_else(|| AuthError::Failed("OAuth callback missing state".into()))?;
         let transaction = transaction_cookie(req)
             .ok_or_else(|| AuthError::Failed("OAuth transaction cookie missing".into()))?;
-        let access_token = self
-            .oauth
-            .exchange(&self.jwt, &transaction, &state, &code)
-            .await?;
-
-        let profile: OAuthProfile = self.oauth.userinfo(&access_token).await?;
-        let user = self
-            .users
-            .find_or_create(&profile.email(), &profile.display_name(), self.config.default_org_id)
-            .await
-            .map_err(|err| AuthError::Failed(format!("identity resolution failed: {err}")))?;
-        Ok(Outcome::Authenticated(Caller {
-            user_id: user.id,
-            org_id: user.org_id,
-            roles: vec![role_from_db(&user.role)],
-        }))
+        let caller = self.flow.resolve_caller(&transaction, &state, &code).await?;
+        Ok(Outcome::Authenticated(caller))
     }
 }
 
 #[injectable]
 pub struct ClientCredentialsStrategy {
     #[inject]
-    config: Arc<IssuerConfig>,
+    flow: Arc<OAuthFlow>,
 }
 
 #[async_trait]
@@ -151,19 +84,8 @@ impl Strategy for ClientCredentialsStrategy {
     ) -> Result<Outcome<AuthenticatedClient>, AuthError> {
         let (client_id, client_secret) =
             basic_credentials(req).ok_or(AuthError::MissingCredentials)?;
-        let client = self
-            .config
-            .clients
-            .iter()
-            .find(|client| {
-                constant_time_eq(client.client_id.as_bytes(), client_id.as_bytes())
-                    && constant_time_eq(client.client_secret.as_bytes(), client_secret.as_bytes())
-            })
-            .ok_or_else(|| AuthError::Failed("invalid client credentials".into()))?;
-        Ok(Outcome::Authenticated(AuthenticatedClient {
-            org_id: client.org_id,
-            scopes: client.scopes.clone(),
-        }))
+        let client = self.flow.authenticate_client(&client_id, &client_secret)?;
+        Ok(Outcome::Authenticated(client))
     }
 }
 
@@ -175,15 +97,4 @@ fn transaction_cookie(req: &Request) -> Option<String> {
             .strip_prefix('=')
             .map(str::to_owned)
     })
-}
-
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff = 0u8;
-    for (x, y) in a.iter().zip(b) {
-        diff |= x ^ y;
-    }
-    diff == 0
 }
