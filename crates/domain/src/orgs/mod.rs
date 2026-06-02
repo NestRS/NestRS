@@ -1,5 +1,6 @@
 mod entity;
 mod error;
+mod http;
 mod module;
 mod resolver;
 mod service;

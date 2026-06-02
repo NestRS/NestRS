@@ -1,8 +1,9 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use nestrs_core::injectable;
 use nestrs_ws::WsServer;
+use parking_lot::Mutex;
 
 use crate::chat::dto::{ChatMessage, SendMessage};
 
@@ -32,7 +33,7 @@ impl RoomService {
             author: message.author,
             text: message.text,
         };
-        let mut history = self.history.lock().unwrap();
+        let mut history = self.history.lock();
         history.push(stored.clone());
         let total = history.len();
         drop(history);
@@ -49,7 +50,7 @@ impl RoomService {
     }
 
     pub fn history(&self) -> Vec<ChatMessage> {
-        self.history.lock().unwrap().clone()
+        self.history.lock().clone()
     }
 }
 
