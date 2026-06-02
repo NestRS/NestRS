@@ -7,13 +7,13 @@ use crate::audio::dto::TranscodeJob;
 use crate::audio::service::Transcoder;
 
 #[processor(queue = "audio", concurrency = 5, retries = 3)]
-pub struct AudioConsumer {
+pub struct AudioProcessor {
     #[inject]
     transcoder: Arc<Transcoder>,
 }
 
 #[async_trait]
-impl Processor for AudioConsumer {
+impl Processor for AudioProcessor {
     type Job = TranscodeJob;
 
     async fn process(&self, job: TranscodeJob) -> Result<()> {
@@ -28,29 +28,29 @@ mod tests {
     use nestrs_core::{Container, Discoverable, DiscoveryService, Module};
     use nestrs_queue::ProcessorMeta;
 
-    use super::AudioConsumer;
+    use super::AudioProcessor;
     use crate::audio::dto::AUDIO_QUEUE;
     use crate::audio::service::Transcoder;
     use crate::audio::AudioModule;
 
     #[test]
-    fn consumer_is_discovered_with_its_queue_config() {
+    fn processor_is_discovered_with_its_queue_config() {
         let container = AudioModule::register(Container::builder()).build();
         let processors = DiscoveryService::new(&container).meta::<ProcessorMeta>();
         let audio = processors
             .iter()
-            .find(|d| d.meta.name == "AudioConsumer")
-            .expect("AudioConsumer is discovered via #[processor]");
+            .find(|d| d.meta.name == "AudioProcessor")
+            .expect("AudioProcessor is discovered via #[processor]");
         assert_eq!(audio.meta.queue, AUDIO_QUEUE);
         assert_eq!(audio.meta.concurrency, 5);
         assert_eq!(audio.meta.retries, 3);
     }
 
     #[test]
-    fn consumer_declares_its_injected_dependency_for_the_access_graph() {
-        assert!(AudioConsumer::dependencies().is_empty());
+    fn processor_declares_its_injected_dependency_for_the_access_graph() {
+        assert!(AudioProcessor::dependencies().is_empty());
         assert!(
-            AudioConsumer::injected().contains(&TypeId::of::<Transcoder>()),
+            AudioProcessor::injected().contains(&TypeId::of::<Transcoder>()),
             "the processor's injected Transcoder is recorded for the access graph",
         );
     }

@@ -14,6 +14,7 @@ serde.workspace = true
 tokio.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
+parking_lot.workspace = true
 
 [dev-dependencies]
 nestrs-testing = { workspace = true, features = ["telemetry"] }
